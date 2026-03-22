@@ -53,8 +53,8 @@ export default function FeaturedInterviews() {
         <div className="mb-12 border-t border-zinc-800/60 pt-20 sm:pt-24">
           {/* Section header */}
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            initial={{ y: 16 }}
+            whileInView={{ y: 0 }}
             viewport={{ once: true, margin: "-60px" }}
             transition={{ duration: 0.45, ease }}
             className="mb-12 flex items-end justify-between gap-8"

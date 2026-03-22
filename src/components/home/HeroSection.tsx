@@ -26,8 +26,8 @@ export default function HeroSection() {
           {/* ── Left: eyebrow + headline ── */}
           <div className="flex-1">
             <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ y: 16 }}
+              animate={{ y: 0 }}
               transition={{ duration: 0.5, ease }}
               className="mb-7 inline-flex items-center gap-2.5 rounded-full border border-zinc-700/60 bg-zinc-800/50 px-4 py-1.5 backdrop-blur-sm"
             >
@@ -38,8 +38,8 @@ export default function HeroSection() {
             </motion.div>
 
             <motion.h1
-              initial={{ opacity: 0, y: 22 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ y: 22 }}
+              animate={{ y: 0 }}
               transition={{ duration: 0.55, delay: 0.1, ease }}
               className="text-5xl font-bold leading-[1.07] tracking-tight text-white sm:text-6xl xl:text-7xl"
             >
@@ -54,8 +54,8 @@ export default function HeroSection() {
 
           {/* ── Right: description + CTAs ── */}
           <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ y: 18 }}
+            animate={{ y: 0 }}
             transition={{ duration: 0.55, delay: 0.22, ease }}
             className="shrink-0 lg:w-[360px] xl:w-[400px]"
           >

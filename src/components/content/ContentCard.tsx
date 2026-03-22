@@ -32,8 +32,8 @@ const ease = [0.25, 0.46, 0.45, 0.94] as const
 export default function ContentCard({ insight, index = 0 }: ContentCardProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={{ y: 24 }}
+      whileInView={{ y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
       transition={{ duration: 0.45, delay: index * 0.07, ease }}
     >
