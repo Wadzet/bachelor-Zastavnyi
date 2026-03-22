@@ -12,7 +12,7 @@ export default function Footer() {
   return (
     <footer className="border-t border-zinc-800/60 bg-zinc-950">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           {/* Brand */}
           <div className="flex flex-col gap-1">
             <span className="text-base font-bold tracking-tight text-white">

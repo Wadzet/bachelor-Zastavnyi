@@ -44,3 +44,52 @@ export type Interview = {
   coverImage?: string
   featured?: boolean
 }
+
+// ─── Admin types ──────────────────────────────────────────────────────────────
+
+export type SourceType = "newsletter" | "blog" | "podcast" | "social" | "news" | "research"
+export type SourceStatus = "active" | "paused" | "error"
+
+export type Source = {
+  id: string
+  name: string
+  url: string
+  type: SourceType
+  status: SourceStatus
+  lastChecked: string // ISO date
+  description?: string
+}
+
+export type ContentType = "insight" | "interview" | "article" | "news"
+export type DraftStatus = "pending" | "generating" | "review" | "approved" | "rejected"
+
+export type Draft = {
+  id: string
+  title: string
+  excerpt: string
+  body: string
+  sourceUrl?: string
+  sourceId?: string
+  type: ContentType
+  topic: Topic
+  status: DraftStatus
+  createdAt: string // ISO date
+  updatedAt: string // ISO date
+}
+
+export type PostStatus = "draft" | "review" | "published" | "archived"
+export type TelegramStatus = "ready" | "scheduled" | "sent" | "failed"
+
+export type Post = {
+  id: string
+  title: string
+  excerpt: string
+  type: ContentType
+  topic: Topic
+  status: PostStatus
+  slug: string
+  publishedAt?: string // ISO date
+  createdAt: string    // ISO date
+  updatedAt: string    // ISO date
+  telegramStatus?: TelegramStatus
+}
