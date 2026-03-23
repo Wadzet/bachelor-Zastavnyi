@@ -148,65 +148,67 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* ── Recent content ───────────────────────────────── */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid min-w-0 w-full max-w-full gap-6 lg:grid-cols-2">
 
         {/* Recent drafts */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+        <div className="min-w-0 w-full max-w-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <div className="mb-5 flex min-w-0 items-center justify-between gap-3">
+            <p className="min-w-0 truncate text-xs font-semibold uppercase tracking-widest text-zinc-500">
               Recent Drafts
             </p>
-            <span className="text-xs text-zinc-600">{mockDrafts.length} total</span>
+            <span className="shrink-0 text-xs text-zinc-600">{mockDrafts.length} total</span>
           </div>
 
           <ul role="list" className="space-y-0">
             {recentDrafts.map((draft) => (
               <li
                 key={draft.id}
-                className="flex items-start justify-between gap-4 overflow-hidden border-b border-zinc-800/60 py-3 last:border-0"
+                className="flex min-w-0 flex-col gap-2 overflow-hidden border-b border-zinc-800/60 py-3 last:border-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
               >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-white">
+                <div className="min-w-0 flex-1 max-w-full">
+                  <p className="min-w-0 max-w-full truncate text-sm font-medium text-white">
                     {draft.title}
                   </p>
-                  <p className="mt-0.5 text-xs text-zinc-600">
+                  <p className="mt-0.5 min-w-0 max-w-full truncate text-xs text-zinc-600">
                     {draft.topic}
                     <span aria-hidden="true" className="mx-1.5">·</span>
                     {formatDate(draft.updatedAt)}
                   </p>
                 </div>
-                <StatusBadge status={draft.status} />
+                <div className="flex shrink-0 items-center self-start">
+                  <StatusBadge status={draft.status} />
+                </div>
               </li>
             ))}
           </ul>
         </div>
 
         {/* Recent posts */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+        <div className="min-w-0 w-full max-w-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+          <div className="mb-5 flex min-w-0 items-center justify-between gap-3">
+            <p className="min-w-0 truncate text-xs font-semibold uppercase tracking-widest text-zinc-500">
               Recent Posts
             </p>
-            <span className="text-xs text-zinc-600">{mockPosts.length} total</span>
+            <span className="shrink-0 text-xs text-zinc-600">{mockPosts.length} total</span>
           </div>
 
           <ul role="list" className="space-y-0">
             {recentPosts.map((post) => (
               <li
                 key={post.id}
-                className="flex items-start justify-between gap-4 overflow-hidden border-b border-zinc-800/60 py-3 last:border-0"
+                className="flex min-w-0 flex-col gap-2 overflow-hidden border-b border-zinc-800/60 py-3 last:border-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
               >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-white">
+                <div className="min-w-0 flex-1 max-w-full">
+                  <p className="min-w-0 max-w-full truncate text-sm font-medium text-white">
                     {post.title}
                   </p>
-                  <p className="mt-0.5 text-xs text-zinc-600">
+                  <p className="mt-0.5 min-w-0 max-w-full truncate text-xs text-zinc-600">
                     {post.topic}
                     <span aria-hidden="true" className="mx-1.5">·</span>
                     {formatDate(post.updatedAt)}
                   </p>
                 </div>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                <div className="flex max-w-full flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
                   <StatusBadge status={post.status} />
                   {post.telegramStatus && (
                     <StatusBadge status={post.telegramStatus} />
