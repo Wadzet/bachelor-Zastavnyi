@@ -1,3 +1,7 @@
+// Prevents this module from being imported in client components or browser bundles.
+// If imported in a "use client" file, Next.js will throw a build-time error.
+import "server-only"
+
 /**
  * src/lib/supabase/server.ts
  *
