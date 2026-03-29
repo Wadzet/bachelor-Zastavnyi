@@ -5,47 +5,13 @@ import Link from "next/link"
 import InterviewCard from "@/components/content/InterviewCard"
 import type { Interview } from "@/types"
 
-// Mock data — replace with real data layer once CMS is wired in
-const featuredInterviews: Interview[] = [
-  {
-    slug: "sarah-chen-meridian-group-embedding-ai-in-operations",
-    title: "Embedding AI Into Operations Without Disrupting Culture",
-    excerpt:
-      "Meridian Group's COO on why the biggest risk in AI transformation is not the technology — it is the people you do not bring along.",
-    guest: {
-      name: "Sarah Chen",
-      role: "Chief Operating Officer",
-      company: "Meridian Group",
-      bio: "Sarah Chen oversees global operations at Meridian Group, where she led the company's AI integration programme across 12 markets.",
-    },
-    qa: [],
-    author: { name: "James Corfield", role: "Contributing Editor" },
-    publishedAt: "2026-04-15",
-    topic: "Leadership",
-    featured: true,
-  },
-  {
-    slug: "michael-torres-vantagepoint-analytics-ai-roi-year-one",
-    title: "The Honest Truth About AI ROI in Year One",
-    excerpt:
-      "VantagePoint's CEO on the metrics that matter, the ones that mislead, and what business leaders should realistically expect in the first twelve months of AI adoption.",
-    guest: {
-      name: "Michael Torres",
-      role: "Chief Executive Officer",
-      company: "VantagePoint Analytics",
-      bio: "Michael Torres founded VantagePoint Analytics in 2019. The firm advises mid-market companies on data strategy and AI implementation.",
-    },
-    qa: [],
-    author: { name: "Elena Marsh", role: "Senior Editor" },
-    publishedAt: "2026-05-02",
-    topic: "AI Strategy",
-    featured: true,
-  },
-]
-
 const ease = [0.25, 0.46, 0.45, 0.94] as const
 
-export default function FeaturedInterviews() {
+interface Props {
+  interviews: Interview[]
+}
+
+export default function FeaturedInterviews({ interviews }: Props) {
   return (
     <section className="bg-zinc-950 py-20 sm:py-24">
       {/* Subtle top separator */}
@@ -83,7 +49,7 @@ export default function FeaturedInterviews() {
 
           {/* Cards grid */}
           <div className="grid gap-5 lg:grid-cols-2">
-            {featuredInterviews.map((interview, i) => (
+            {interviews.map((interview, i) => (
               <InterviewCard key={interview.slug} interview={interview} index={i} />
             ))}
           </div>

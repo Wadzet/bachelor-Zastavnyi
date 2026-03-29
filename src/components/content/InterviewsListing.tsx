@@ -7,100 +7,19 @@ import SearchBar from "@/components/ui/SearchBar"
 import FilterPills from "@/components/ui/FilterPills"
 import type { Interview, Topic } from "@/types"
 
-const allInterviews: Interview[] = [
-  {
-    slug: "sarah-chen-meridian-group-embedding-ai-in-operations",
-    title: "Embedding AI Into Operations Without Disrupting Culture",
-    excerpt:
-      "Meridian Group's COO on why the biggest risk in AI transformation is not the technology — it is the people you do not bring along.",
-    guest: {
-      name: "Sarah Chen",
-      role: "Chief Operating Officer",
-      company: "Meridian Group",
-      bio: "Sarah Chen oversees global operations at Meridian Group, where she led the company's AI integration programme across 12 markets.",
-    },
-    qa: [],
-    author: { name: "BizInsight Editorial", role: "Editorial" },
-    publishedAt: "2026-04-15",
-    topic: "Leadership",
-    featured: true,
-  },
-  {
-    slug: "michael-torres-vantagepoint-analytics-ai-roi-year-one",
-    title: "The Honest Truth About AI ROI in Year One",
-    excerpt:
-      "VantagePoint's CEO on the metrics that matter, the ones that mislead, and what business leaders should realistically expect in the first twelve months of AI adoption.",
-    guest: {
-      name: "Michael Torres",
-      role: "Chief Executive Officer",
-      company: "VantagePoint Analytics",
-      bio: "Michael Torres founded VantagePoint Analytics in 2019. The firm advises mid-market companies on data strategy and AI implementation.",
-    },
-    qa: [],
-    author: { name: "BizInsight Editorial", role: "Editorial" },
-    publishedAt: "2026-05-02",
-    topic: "AI Strategy",
-    featured: true,
-  },
-  {
-    slug: "priya-kapoor-terrascale-logistics-predictive-operations",
-    title: "How Predictive AI Is Reshaping Supply Chain Decisions",
-    excerpt:
-      "TerraScale Logistics' COO on moving from reactive reporting to proactive decision-making — and why most operations leaders underestimate the culture shift involved.",
-    guest: {
-      name: "Priya Kapoor",
-      role: "Chief Operating Officer",
-      company: "TerraScale Logistics",
-      bio: "Priya Kapoor leads operations and supply chain strategy at TerraScale Logistics, overseeing a network spanning 40 distribution centres across Europe and Asia.",
-    },
-    qa: [],
-    author: { name: "BizInsight Editorial", role: "Editorial" },
-    publishedAt: "2026-04-08",
-    topic: "Operations",
-  },
-  {
-    slug: "david-stein-novus-capital-ai-automation-finance",
-    title: "Automating the Analyst: AI's Role in Modern Finance Teams",
-    excerpt:
-      "Novus Capital's Head of AI on which finance workflows are ready to automate now, which ones are not, and how to avoid the common mistake of automating the wrong things first.",
-    guest: {
-      name: "David Stein",
-      role: "Head of AI",
-      company: "Novus Capital",
-      bio: "David Stein leads AI strategy and implementation at Novus Capital, where he has overseen the automation of core research and reporting functions over the past two years.",
-    },
-    qa: [],
-    author: { name: "BizInsight Editorial", role: "Editorial" },
-    publishedAt: "2026-04-29",
-    topic: "Automation",
-  },
-  {
-    slug: "amara-osei-brightfield-group-ai-strategy-execution",
-    title: "Turning AI Strategy Into Execution: What Separates Leaders From Laggards",
-    excerpt:
-      "Brightfield Group's CEO on the organisational signals that predict whether an AI strategy will move from slide deck to shipped product — and what to do when it stalls.",
-    guest: {
-      name: "Amara Osei",
-      role: "Chief Executive Officer",
-      company: "Brightfield Group",
-      bio: "Amara Osei co-founded Brightfield Group in 2017 and has since grown it into a 200-person management consultancy specialising in digital and AI transformation.",
-    },
-    qa: [],
-    author: { name: "BizInsight Editorial", role: "Editorial" },
-    publishedAt: "2026-05-08",
-    topic: "AI Strategy",
-  },
-]
-
 const ease = [0.25, 0.46, 0.45, 0.94] as const
 
-export default function InterviewsListing() {
+interface Props {
+  interviews: Interview[]
+}
+
+export default function InterviewsListing({ interviews }: Props) {
   const [search, setSearch] = useState("")
   const [activeTopic, setActiveTopic] = useState<Topic | "All">("All")
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
-    return allInterviews.filter((interview) => {
+    return interviews.filter((interview) => {
       const matchesTopic = activeTopic === "All" || interview.topic === activeTopic
       const matchesSearch =
         !q ||
@@ -110,7 +29,7 @@ export default function InterviewsListing() {
         interview.guest.company.toLowerCase().includes(q)
       return matchesTopic && matchesSearch
     })
-  }, [search, activeTopic])
+  }, [search, activeTopic, interviews])
 
   return (
     <section className="min-h-screen bg-zinc-950">

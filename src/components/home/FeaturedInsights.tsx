@@ -5,46 +5,13 @@ import Link from "next/link"
 import ContentCard from "@/components/content/ContentCard"
 import type { Insight } from "@/types"
 
-// Mock data — replace with real data layer once CMS is wired in
-const featuredInsights: Insight[] = [
-  {
-    slug: "ai-strategy-fails-without-operational-readiness",
-    title: "Why AI Strategy Fails Without Operational Readiness",
-    excerpt:
-      "Most AI initiatives stall not because of poor technology, but because the organisation was not ready to absorb the change. Here is what readiness actually requires.",
-    body: "",
-    author: { name: "Elena Marsh", role: "Senior Editor" },
-    publishedAt: "2026-04-28",
-    topic: "AI Strategy",
-    featured: true,
-  },
-  {
-    slug: "automating-the-middle-where-ai-delivers-real-roi",
-    title: "Automating the Middle: Where AI Delivers Real ROI in Operations",
-    excerpt:
-      "The biggest efficiency gains from AI are not at the edges of your business — they are in the middle-office workflows most leaders never examine closely.",
-    body: "",
-    author: { name: "James Corfield", role: "Contributing Analyst" },
-    publishedAt: "2026-05-05",
-    topic: "Automation",
-    featured: true,
-  },
-  {
-    slug: "what-market-leaders-understand-about-ai-governance",
-    title: "What Market Leaders Understand About AI Governance That Others Don't",
-    excerpt:
-      "Governance is not a constraint on AI adoption — it is the foundation that makes scale possible. The companies moving fastest are also the most deliberate.",
-    body: "",
-    author: { name: "Elena Marsh", role: "Senior Editor" },
-    publishedAt: "2026-05-09",
-    topic: "Market Trends",
-    featured: true,
-  },
-]
-
 const ease = [0.25, 0.46, 0.45, 0.94] as const
 
-export default function FeaturedInsights() {
+interface Props {
+  insights: Insight[]
+}
+
+export default function FeaturedInsights({ insights }: Props) {
   return (
     <section className="bg-zinc-950 py-20 sm:py-24">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -80,7 +47,7 @@ export default function FeaturedInsights() {
 
         {/* Cards grid */}
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {featuredInsights.map((insight, i) => (
+          {insights.map((insight, i) => (
             <ContentCard key={insight.slug} insight={insight} index={i} />
           ))}
         </div>
