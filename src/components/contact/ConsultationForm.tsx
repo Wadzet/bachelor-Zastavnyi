@@ -9,9 +9,10 @@ type FieldProps = {
   type?: string
   required?: boolean
   autoComplete?: string
+  disabled?: boolean
 }
 
-function Field({ id, label, type = "text", required = true, autoComplete }: FieldProps) {
+function Field({ id, label, type = "text", required = true, autoComplete, disabled }: FieldProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="text-xs font-medium text-zinc-400">
@@ -24,7 +25,8 @@ function Field({ id, label, type = "text", required = true, autoComplete }: Fiel
         type={type}
         required={required}
         autoComplete={autoComplete}
-        className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition-colors duration-150 focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600/50"
+        disabled={disabled}
+        className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition-colors duration-150 focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600/50 disabled:opacity-50"
       />
     </div>
   )
@@ -68,24 +70,58 @@ function SuccessState() {
 
 export default function ConsultationForm() {
   const [submitted, setSubmitted] = useState(false)
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    // UI-only: no backend submission in this slice
-    setSubmitted(true)
-  }
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   if (submitted) {
     return <SuccessState />
   }
 
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+
+    const form = e.currentTarget
+    const data = new FormData(form)
+
+    const body = {
+      fullName: (data.get("full-name") as string) ?? "",
+      email: (data.get("work-email") as string) ?? "",
+      company: (data.get("company") as string) ?? "",
+      role: (data.get("role") as string) ?? "",
+      message: (data.get("message") as string) ?? "",
+    }
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+
+      const json = (await res.json()) as { success: boolean; message?: string }
+
+      if (!json.success) {
+        setError(json.message ?? "Something went wrong. Please try again.")
+        return
+      }
+
+      setSubmitted(true)
+    } catch {
+      setError("Network error. Please check your connection and try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field id="full-name" label="Full name" autoComplete="name" />
-        <Field id="work-email" label="Work email" type="email" autoComplete="email" />
-        <Field id="company" label="Company name" autoComplete="organization" />
-        <Field id="role" label="Role / job title" autoComplete="organization-title" />
+        <Field id="full-name" label="Full name" autoComplete="name" disabled={loading} />
+        <Field id="work-email" label="Work email" type="email" autoComplete="email" disabled={loading} />
+        <Field id="company" label="Company name" autoComplete="organization" disabled={loading} />
+        <Field id="role" label="Role / job title" autoComplete="organization-title" disabled={loading} />
       </div>
 
       {/* Message */}
@@ -98,15 +134,24 @@ export default function ConsultationForm() {
           name="message"
           required
           rows={5}
-          className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition-colors duration-150 focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600/50"
+          disabled={loading}
+          className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition-colors duration-150 focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600/50 disabled:opacity-50"
         />
       </div>
 
+      {/* Error message */}
+      {error && (
+        <p role="alert" className="text-xs text-red-400">
+          {error}
+        </p>
+      )}
+
       <button
         type="submit"
-        className="inline-flex w-full items-center justify-center rounded-full bg-amber-400 px-6 py-3 text-sm font-semibold text-zinc-950 shadow-sm transition-all duration-200 hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
+        disabled={loading}
+        className="inline-flex w-full items-center justify-center rounded-full bg-amber-400 px-6 py-3 text-sm font-semibold text-zinc-950 shadow-sm transition-all duration-200 hover:bg-amber-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        Request Consultation
+        {loading ? "Submitting…" : "Request Consultation"}
       </button>
 
       <p className="text-center text-xs text-zinc-600">
