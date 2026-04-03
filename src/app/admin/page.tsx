@@ -2,11 +2,18 @@ import type { Metadata } from "next"
 import { BRAND } from "@/config/brand"
 import StatCard from "@/components/admin/StatCard"
 import StatusBadge from "@/components/admin/StatusBadge"
-import { mockSources, mockDrafts, mockPosts } from "@/data/admin"
+import {
+  getAdminDashboardStats,
+  getAdminRecentDrafts,
+  getAdminRecentPosts,
+} from "@/lib/data/admin"
 
 export const metadata: Metadata = {
   title: "Dashboard",
 }
+
+// Revalidate every 60 seconds — keeps stats and recent items fresh.
+export const revalidate = 60
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -60,22 +67,12 @@ const workflowSteps = [
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function AdminDashboardPage() {
-  // Computed stats
-  const activeSources  = mockSources.filter((s) => s.status === "active").length
-  const sourceErrors   = mockSources.filter((s) => s.status === "error").length
-  const draftsInReview = mockDrafts.filter((d) => d.status === "review").length
-  const publishedPosts = mockPosts.filter((p) => p.status === "published").length
-  const telegramReady  = mockPosts.filter((p) => p.telegramStatus === "ready").length
-
-  // Recent items — most recent first
-  const recentDrafts = [...mockDrafts]
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 4)
-
-  const recentPosts = [...mockPosts]
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 5)
+export default async function AdminDashboardPage() {
+  const [stats, recentDrafts, recentPosts] = await Promise.all([
+    getAdminDashboardStats(),
+    getAdminRecentDrafts(),
+    getAdminRecentPosts(),
+  ])
 
   return (
     <div className="space-y-8">
@@ -94,25 +91,25 @@ export default function AdminDashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Trusted Sources"
-          value={mockSources.length}
-          description={`${activeSources} active${sourceErrors > 0 ? ` · ${sourceErrors} error` : ""}`}
+          value={stats.totalSources}
+          description={`${stats.activeSources} active${stats.sourceErrors > 0 ? ` · ${stats.sourceErrors} error` : ""}`}
         />
         <StatCard
           label="Drafts in Review"
-          value={draftsInReview}
+          value={stats.draftsInReview}
           description="Awaiting editorial approval"
-          trend={draftsInReview > 0 ? `${draftsInReview} need attention` : undefined}
+          trend={stats.draftsInReview > 0 ? `${stats.draftsInReview} need attention` : undefined}
         />
         <StatCard
           label="Published Posts"
-          value={publishedPosts}
+          value={stats.publishedPosts}
           description="Live on the public website"
         />
         <StatCard
           label="Telegram Ready"
-          value={telegramReady}
+          value={stats.telegramReady}
           description="Posts ready to distribute"
-          trend={telegramReady > 0 ? "Ready to send" : undefined}
+          trend={stats.telegramReady > 0 ? "Ready to send" : undefined}
         />
       </div>
 
@@ -156,7 +153,7 @@ export default function AdminDashboardPage() {
             <p className="min-w-0 truncate text-xs font-semibold uppercase tracking-widest text-zinc-500">
               Recent Drafts
             </p>
-            <span className="shrink-0 text-xs text-zinc-600">{mockDrafts.length} total</span>
+            <span className="shrink-0 text-xs text-zinc-600">{stats.totalDrafts} total</span>
           </div>
 
           <ul role="list" className="space-y-0">
@@ -189,7 +186,7 @@ export default function AdminDashboardPage() {
             <p className="min-w-0 truncate text-xs font-semibold uppercase tracking-widest text-zinc-500">
               Recent Posts
             </p>
-            <span className="shrink-0 text-xs text-zinc-600">{mockPosts.length} total</span>
+            <span className="shrink-0 text-xs text-zinc-600">{stats.totalPosts} total</span>
           </div>
 
           <ul role="list" className="space-y-0">

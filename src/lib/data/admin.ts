@@ -67,7 +67,9 @@ export type AdminDashboardStats = {
   totalSources: number
   activeSources: number
   sourceErrors: number
+  totalDrafts: number
   draftsInReview: number
+  totalPosts: number
   publishedPosts: number
   telegramReady: number
 }
@@ -174,7 +176,9 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
     totalSources:   sources?.length ?? 0,
     activeSources:  sources?.filter((s) => s.status === "active").length ?? 0,
     sourceErrors:   sources?.filter((s) => s.status === "error").length  ?? 0,
+    totalDrafts:    drafts?.length ?? 0,
     draftsInReview: drafts?.filter((d)  => d.status === "review").length ?? 0,
+    totalPosts:     posts?.length ?? 0,
     publishedPosts: posts?.filter((p)   => p.status === "published").length ?? 0,
     telegramReady:  telegramJobs?.filter((j) => j.status === "ready").length ?? 0,
   }
