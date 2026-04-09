@@ -53,6 +53,9 @@ type PostRow = {
   published_at: string | null
   created_at: string
   updated_at: string
+  body_markdown: string | null
+  featured: boolean | null
+  cover_image_url: string | null
 }
 
 // Minimal shape fetched from distribution_jobs for telegram status merging.
@@ -121,10 +124,13 @@ function mapPostRow(row: PostRow, telegramDbStatus: string | null | undefined): 
     id:             row.id,
     title:          row.title,
     excerpt:        row.excerpt,
+    body:           row.body_markdown ?? undefined,
     type:           row.content_type as ContentType,
     topic:          row.topic as Topic,
     status:         row.status as PostStatus,
     slug:           row.slug,
+    featured:       row.featured ?? undefined,
+    coverImage:     row.cover_image_url ?? undefined,
     publishedAt:    row.published_at ?? undefined,
     createdAt:      row.created_at,
     updatedAt:      row.updated_at,
@@ -216,7 +222,8 @@ export async function getAdminRecentPosts(limit = 5): Promise<Post[]> {
       .from("posts")
       .select(
         "id, title, excerpt, content_type, topic, status, " +
-        "slug, published_at, created_at, updated_at",
+        "slug, published_at, created_at, updated_at, " +
+        "body_markdown, featured, cover_image_url",
       )
       .order("updated_at", { ascending: false })
       .limit(limit),
@@ -301,7 +308,8 @@ export async function getAdminPosts(): Promise<Post[]> {
       .from("posts")
       .select(
         "id, title, excerpt, content_type, topic, status, " +
-        "slug, published_at, created_at, updated_at",
+        "slug, published_at, created_at, updated_at, " +
+        "body_markdown, featured, cover_image_url",
       )
       .order("updated_at", { ascending: false }),
     fetchAllTelegramJobs(),
@@ -327,7 +335,8 @@ export async function getAdminPostById(id: string): Promise<Post | null> {
       .from("posts")
       .select(
         "id, title, excerpt, content_type, topic, status, " +
-        "slug, published_at, created_at, updated_at",
+        "slug, published_at, created_at, updated_at, " +
+        "body_markdown, featured, cover_image_url",
       )
       .eq("id", id)
       .maybeSingle(),

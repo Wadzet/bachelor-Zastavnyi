@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { BRAND } from "@/config/brand"
 import SearchBar from "@/components/ui/SearchBar"
 import StatusBadge from "@/components/admin/StatusBadge"
@@ -11,6 +12,20 @@ import type { PostStatus, TelegramStatus, Post } from "@/types"
 type PostStatusFilter = "All" | PostStatus
 type TelegramFilter   = "All" | TelegramStatus
 type PreviewMode      = "post" | "telegram"
+
+type ActionLoading = { id: string; action: string } | null
+type ActionError   = { id: string; message: string } | null
+
+type EditFields = {
+  title:      string
+  excerpt:    string
+  slug:       string
+  topic:      string
+  type:       string
+  body:       string
+  featured:   boolean
+  coverImage: string
+}
 
 const POST_STATUS_FILTERS: { value: PostStatusFilter; label: string }[] = [
   { value: "All",       label: "All"       },
@@ -28,7 +43,28 @@ const TELEGRAM_FILTERS: { value: TelegramFilter; label: string }[] = [
   { value: "failed",    label: "Failed"    },
 ]
 
+const VALID_TOPICS_EDIT = [
+  "AI Strategy",
+  "Operations",
+  "Leadership",
+  "Automation",
+  "Case Study",
+  "Market Trends",
+] as const
+
+const VALID_TYPES_EDIT = [
+  { value: "insight",   label: "Insight"   },
+  { value: "interview", label: "Interview" },
+  { value: "article",   label: "Article"   },
+  { value: "news",      label: "News"      },
+]
+
 const BRAND_DOMAIN = BRAND.siteUrl
+
+const inputCls =
+  "w-full rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-xs text-white " +
+  "placeholder-zinc-600 focus:border-amber-400/50 focus:outline-none focus:ring-1 " +
+  "focus:ring-amber-400/30 disabled:opacity-50"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +91,259 @@ function buildTelegramMessage(post: Post): string {
     `${post.title}\n\n` +
     `${excerpt}\n\n` +
     `Read the full article:\n${url}`
+  )
+}
+
+// ─── Edit panel ───────────────────────────────────────────────────────────────
+
+function EditPanel({
+  post,
+  onClose,
+  onSaved,
+}: {
+  post: Post
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [fields, setFields] = useState<EditFields>({
+    title:      post.title,
+    excerpt:    post.excerpt,
+    slug:       post.slug,
+    topic:      post.topic,
+    type:       post.type,
+    body:       post.body      ?? "",
+    featured:   post.featured  ?? false,
+    coverImage: post.coverImage ?? "",
+  })
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+  const [saved,   setSaved]   = useState(false)
+
+  function set<K extends keyof EditFields>(key: K, value: EditFields[K]) {
+    setFields((f) => ({ ...f, [key]: value }))
+    setSaved(false)
+  }
+
+  async function handleSave() {
+    setLoading(true)
+    setError(null)
+    setSaved(false)
+    try {
+      const res = await fetch(`/api/admin/posts/${post.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title:      fields.title,
+          excerpt:    fields.excerpt,
+          slug:       fields.slug,
+          topic:      fields.topic,
+          type:       fields.type,
+          body:       fields.body,
+          featured:   fields.featured,
+          coverImage: fields.coverImage || null,
+        }),
+      })
+      const json = await res.json()
+      if (!json.success) {
+        setError(json.message ?? "Failed to save.")
+      } else {
+        setSaved(true)
+        onSaved()
+      }
+    } catch {
+      setError("Network error. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-400/20 bg-zinc-900 p-5">
+      {/* Header */}
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-amber-400/80">
+          Edit post
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-zinc-600 transition-colors hover:text-white"
+          aria-label="Close edit panel"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="space-y-3">
+
+        {/* Title */}
+        <div>
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            Title <span className="text-red-400">*</span>
+          </label>
+          <input
+            type="text"
+            value={fields.title}
+            onChange={(e) => set("title", e.target.value)}
+            disabled={loading}
+            className={inputCls}
+            placeholder="Post title"
+          />
+        </div>
+
+        {/* Excerpt */}
+        <div>
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            Excerpt <span className="text-red-400">*</span>
+          </label>
+          <textarea
+            value={fields.excerpt}
+            onChange={(e) => set("excerpt", e.target.value)}
+            disabled={loading}
+            rows={3}
+            className={inputCls + " resize-none"}
+            placeholder="Short description shown in listings"
+          />
+        </div>
+
+        {/* Slug */}
+        <div>
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            Slug <span className="text-red-400">*</span>
+          </label>
+          <input
+            type="text"
+            value={fields.slug}
+            onChange={(e) => set("slug", e.target.value)}
+            disabled={loading}
+            className={inputCls + " font-mono"}
+            placeholder="url-safe-slug"
+          />
+          <p className="mt-1 text-[10px] text-zinc-700">
+            Lowercase letters, numbers, hyphens only
+          </p>
+        </div>
+
+        {/* Type + Topic */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              Type <span className="text-red-400">*</span>
+            </label>
+            <select
+              value={fields.type}
+              onChange={(e) => set("type", e.target.value)}
+              disabled={loading}
+              className={inputCls}
+            >
+              {VALID_TYPES_EDIT.map(({ value, label }) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              Topic <span className="text-red-400">*</span>
+            </label>
+            <select
+              value={fields.topic}
+              onChange={(e) => set("topic", e.target.value)}
+              disabled={loading}
+              className={inputCls}
+            >
+              {VALID_TOPICS_EDIT.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Body — non-interview only */}
+        {fields.type !== "interview" ? (
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              Body (Markdown) <span className="text-red-400">*</span>
+            </label>
+            <textarea
+              value={fields.body}
+              onChange={(e) => set("body", e.target.value)}
+              disabled={loading}
+              rows={8}
+              className={inputCls + " resize-y font-mono text-[11px]"}
+              placeholder={"# Heading\n\nYour content here…"}
+            />
+          </div>
+        ) : (
+          <p className="rounded-lg bg-zinc-800/40 px-3 py-2 text-[11px] text-zinc-600">
+            Interview Q&amp;A editing is not yet supported. You can edit the title,
+            excerpt, slug, topic, featured, and cover image.
+          </p>
+        )}
+
+        {/* Cover image */}
+        <div>
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            Cover Image URL
+          </label>
+          <input
+            type="text"
+            value={fields.coverImage}
+            onChange={(e) => set("coverImage", e.target.value)}
+            disabled={loading}
+            className={inputCls}
+            placeholder="https://…"
+          />
+        </div>
+
+        {/* Featured */}
+        <label className="flex cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            checked={fields.featured}
+            onChange={(e) => set("featured", e.target.checked)}
+            disabled={loading}
+            className="h-3.5 w-3.5 accent-amber-400"
+          />
+          <span className="text-xs text-zinc-400">Featured post</span>
+        </label>
+
+        {/* Error */}
+        {error && (
+          <p role="alert" className="text-xs text-red-400">
+            {error}
+          </p>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-3 border-t border-zinc-800/60 pt-3">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={loading}
+            className="inline-flex items-center rounded-full bg-amber-400 px-4 py-1.5 text-xs font-semibold text-zinc-950 transition-colors hover:bg-amber-300 disabled:opacity-50"
+          >
+            {loading ? "Saving…" : saved ? "Saved ✓" : "Save changes"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="text-xs text-zinc-600 transition-colors hover:text-zinc-400 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -267,12 +556,17 @@ interface Props {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PostsClient({ posts }: Props) {
+  const router = useRouter()
+
   // ── State ────────────────────────────────────────────────────────────────────
   const [search, setSearch]                 = useState("")
   const [statusFilter, setStatusFilter]     = useState<PostStatusFilter>("All")
   const [telegramFilter, setTelegramFilter] = useState<TelegramFilter>("All")
   const [selectedPost, setSelectedPost]     = useState<Post | null>(null)
   const [previewMode, setPreviewMode]       = useState<PreviewMode>("post")
+  const [editingPost, setEditingPost]       = useState<Post | null>(null)
+  const [actionLoading, setActionLoading]   = useState<ActionLoading>(null)
+  const [actionError, setActionError]       = useState<ActionError>(null)
 
   // ── Filtered list ────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -296,6 +590,7 @@ export default function PostsClient({ posts }: Props) {
 
   // ── Panel handlers ───────────────────────────────────────────────────────────
   function handlePreview(post: Post) {
+    setEditingPost(null)
     if (selectedPost?.id === post.id && previewMode === "post") {
       setSelectedPost(null)
     } else {
@@ -305,6 +600,7 @@ export default function PostsClient({ posts }: Props) {
   }
 
   function handleTelegram(post: Post) {
+    setEditingPost(null)
     if (selectedPost?.id === post.id && previewMode === "telegram") {
       setSelectedPost(null)
     } else {
@@ -318,6 +614,82 @@ export default function PostsClient({ posts }: Props) {
     setStatusFilter("All")
     setTelegramFilter("All")
   }
+
+  // ── Edit handlers ────────────────────────────────────────────────────────────
+  function handleEditOpen(post: Post) {
+    setSelectedPost(null)
+    setActionError(null)
+    setEditingPost(post)
+  }
+
+  function handleEditClose() {
+    setEditingPost(null)
+  }
+
+  function handleEditSaved() {
+    router.refresh()
+    setEditingPost(null)
+  }
+
+  // ── Mutation handlers ────────────────────────────────────────────────────────
+  async function handlePublish(post: Post) {
+    setActionLoading({ id: post.id, action: "publish" })
+    setActionError(null)
+    try {
+      const res  = await fetch(`/api/admin/posts/${post.id}/publish`, { method: "POST" })
+      const json = await res.json()
+      if (!json.success) {
+        setActionError({ id: post.id, message: json.message ?? "Failed to publish." })
+      } else {
+        router.refresh()
+      }
+    } catch {
+      setActionError({ id: post.id, message: "Network error. Please try again." })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleArchive(post: Post) {
+    setActionLoading({ id: post.id, action: "archive" })
+    setActionError(null)
+    try {
+      const res  = await fetch(`/api/admin/posts/${post.id}/archive`, { method: "POST" })
+      const json = await res.json()
+      if (!json.success) {
+        setActionError({ id: post.id, message: json.message ?? "Failed to archive." })
+      } else {
+        if (selectedPost?.id === post.id) setSelectedPost(null)
+        if (editingPost?.id  === post.id) setEditingPost(null)
+        router.refresh()
+      }
+    } catch {
+      setActionError({ id: post.id, message: "Network error. Please try again." })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleRestore(post: Post) {
+    setActionLoading({ id: post.id, action: "restore" })
+    setActionError(null)
+    try {
+      const res  = await fetch(`/api/admin/posts/${post.id}/restore`, { method: "POST" })
+      const json = await res.json()
+      if (!json.success) {
+        setActionError({ id: post.id, message: json.message ?? "Failed to restore." })
+      } else {
+        router.refresh()
+      }
+    } catch {
+      setActionError({ id: post.id, message: "Network error. Please try again." })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // ── Derived layout flag ───────────────────────────────────────────────────────
+  const showRightPanel = !!(editingPost ?? selectedPost)
 
   return (
     <div className="space-y-6">
@@ -451,10 +823,10 @@ export default function PostsClient({ posts }: Props) {
         Showing {filtered.length} {filtered.length === 1 ? "post" : "posts"}
       </p>
 
-      {/* ── List + preview panel ─────────────────────────── */}
+      {/* ── List + right panel ────────────────────────────── */}
       <div
         className={
-          selectedPost
+          showRightPanel
             ? "grid gap-5 lg:grid-cols-[1fr_380px] lg:items-start"
             : ""
         }
@@ -466,6 +838,11 @@ export default function PostsClient({ posts }: Props) {
               const isPreviewSelected  = selectedPost?.id === post.id && previewMode === "post"
               const isTelegramSelected = selectedPost?.id === post.id && previewMode === "telegram"
               const isAnySelected      = selectedPost?.id === post.id
+              const isEditOpen         = editingPost?.id === post.id
+              const isLoading          = actionLoading?.id === post.id
+              const isPublishing       = isLoading && actionLoading?.action === "publish"
+              const isArchiving        = isLoading && actionLoading?.action === "archive"
+              const isRestoring        = isLoading && actionLoading?.action === "restore"
               const path               = publicUrlPath(post)
 
               return (
@@ -473,7 +850,9 @@ export default function PostsClient({ posts }: Props) {
                   key={post.id}
                   className={[
                     "rounded-xl border bg-zinc-900 px-5 py-4 transition-colors duration-150",
-                    isAnySelected
+                    isEditOpen
+                      ? "border-amber-400/30"
+                      : isAnySelected
                       ? isTelegramSelected
                         ? "border-blue-400/25"
                         : "border-amber-400/30"
@@ -514,6 +893,12 @@ export default function PostsClient({ posts }: Props) {
                           </>
                         )}
                       </div>
+                      {/* Per-post action error */}
+                      {actionError?.id === post.id && (
+                        <p role="alert" className="mt-2 text-xs text-red-400">
+                          {actionError.message}
+                        </p>
+                      )}
                     </div>
 
                     {/* Right: actions */}
@@ -523,8 +908,9 @@ export default function PostsClient({ posts }: Props) {
                       <button
                         type="button"
                         onClick={() => handlePreview(post)}
+                        disabled={!!actionLoading}
                         className={[
-                          "inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                          "inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
                           isPreviewSelected
                             ? "border-amber-400/40 bg-amber-400/10 text-amber-400"
                             : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-white",
@@ -536,10 +922,18 @@ export default function PostsClient({ posts }: Props) {
                       {/* Edit */}
                       <button
                         type="button"
-                        onClick={() => {}}
-                        className="inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+                        onClick={() =>
+                          isEditOpen ? handleEditClose() : handleEditOpen(post)
+                        }
+                        disabled={!!actionLoading}
+                        className={[
+                          "inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+                          isEditOpen
+                            ? "border-amber-400/40 bg-amber-400/10 text-amber-400"
+                            : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-white",
+                        ].join(" ")}
                       >
-                        Edit
+                        {isEditOpen ? "Editing" : "Edit"}
                       </button>
 
                       {/* Publish / View live / Restore */}
@@ -555,18 +949,32 @@ export default function PostsClient({ posts }: Props) {
                       ) : post.status === "archived" ? (
                         <button
                           type="button"
-                          onClick={() => {}}
-                          className="inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+                          onClick={() => handleRestore(post)}
+                          disabled={!!actionLoading}
+                          className="inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white disabled:opacity-50"
                         >
-                          Restore
+                          {isRestoring ? "Restoring…" : "Restore"}
                         </button>
                       ) : (
                         <button
                           type="button"
-                          onClick={() => {}}
-                          className="inline-flex items-center rounded-lg border border-emerald-700/50 bg-emerald-900/20 px-3 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-900/40"
+                          onClick={() => handlePublish(post)}
+                          disabled={!!actionLoading}
+                          className="inline-flex items-center rounded-lg border border-emerald-700/50 bg-emerald-900/20 px-3 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-900/40 disabled:opacity-50"
                         >
-                          Publish
+                          {isPublishing ? "Publishing…" : "Publish"}
+                        </button>
+                      )}
+
+                      {/* Archive — available for all non-archived posts */}
+                      {post.status !== "archived" && (
+                        <button
+                          type="button"
+                          onClick={() => handleArchive(post)}
+                          disabled={!!actionLoading}
+                          className="inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white disabled:opacity-50"
+                        >
+                          {isArchiving ? "Archiving…" : "Archive"}
                         </button>
                       )}
 
@@ -574,8 +982,9 @@ export default function PostsClient({ posts }: Props) {
                       <button
                         type="button"
                         onClick={() => handleTelegram(post)}
+                        disabled={!!actionLoading}
                         className={[
-                          "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                          "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
                           isTelegramSelected
                             ? "border-blue-400/40 bg-blue-400/10 text-blue-300"
                             : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-white",
@@ -628,28 +1037,34 @@ export default function PostsClient({ posts }: Props) {
           </div>
         )}
 
-        {/* ── Preview / Telegram panel (sticky on lg+) ──── */}
-        {selectedPost && (
+        {/* ── Right panel: edit, post preview, or Telegram preview ── */}
+        {showRightPanel && (
           <div className="lg:sticky lg:top-6 lg:self-start">
-            {previewMode === "telegram" ? (
+            {editingPost ? (
+              <EditPanel
+                post={editingPost}
+                onClose={handleEditClose}
+                onSaved={handleEditSaved}
+              />
+            ) : selectedPost && previewMode === "telegram" ? (
               <TelegramPreviewPanel
                 post={selectedPost}
                 onClose={() => setSelectedPost(null)}
               />
-            ) : (
+            ) : selectedPost ? (
               <PostPreviewPanel
                 post={selectedPost}
                 onClose={() => setSelectedPost(null)}
               />
-            )}
+            ) : null}
           </div>
         )}
       </div>
 
       {/* ── Footer note ───────────────────────────────────── */}
       <p className="border-t border-zinc-800/60 pt-4 text-xs text-zinc-700">
-        Publishing and Telegram distribution are not yet active.
-        All actions are mock UI — no data is persisted or sent.
+        Telegram distribution is not yet active.
+        Telegram actions are mock UI — no data is sent to Telegram.
       </p>
 
     </div>

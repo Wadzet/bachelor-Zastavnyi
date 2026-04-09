@@ -84,10 +84,13 @@ export type Post = {
   id: string
   title: string
   excerpt: string
+  body?: string        // body_markdown — undefined for interview posts
   type: ContentType
   topic: Topic
   status: PostStatus
   slug: string
+  featured?: boolean
+  coverImage?: string  // cover_image_url
   publishedAt?: string // ISO date
   createdAt: string    // ISO date
   updatedAt: string    // ISO date
