@@ -19,7 +19,9 @@ type EditFields = {
   sourceUrl: string
 }
 
-type ActionLoading = { id: string; action: "approve" | "reject" } | null
+type ActionLoading = { id: string; action: "approve" | "reject" | "promote" } | null
+
+type PromoteResult = { postId: string; slug: string; alreadyExists?: boolean }
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "All",      label: "All"      },
@@ -455,8 +457,9 @@ export default function DraftsClient({ drafts, sources }: Props) {
   const [editingDraft, setEditingDraft]   = useState<Draft | null>(null)
 
   // ── Mutation state ───────────────────────────────────────────────────────────
-  const [actionLoading, setActionLoading] = useState<ActionLoading>(null)
-  const [actionError, setActionError]     = useState<{ id: string; message: string } | null>(null)
+  const [actionLoading, setActionLoading]   = useState<ActionLoading>(null)
+  const [actionError, setActionError]       = useState<{ id: string; message: string } | null>(null)
+  const [promoteResults, setPromoteResults] = useState<Record<string, PromoteResult>>({})
 
   // ── Filtered list ────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -541,6 +544,41 @@ export default function DraftsClient({ drafts, sources }: Props) {
       }
       if (selectedDraft?.id === draft.id) setSelectedDraft(null)
       router.refresh()
+    } catch {
+      setActionError({ id: draft.id, message: "Network error. Please try again." })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // ── Promote handler ───────────────────────────────────────────────────────────
+
+  async function handlePromote(draft: Draft) {
+    if (actionLoading) return
+    setActionError(null)
+    setActionLoading({ id: draft.id, action: "promote" })
+    try {
+      const res  = await fetch(`/api/admin/drafts/${draft.id}/promote`, { method: "POST" })
+      const json = (await res.json()) as {
+        success:       boolean
+        postId?:       string
+        slug?:         string
+        alreadyExists?: boolean
+        message?:      string
+      }
+      if (!json.success) {
+        setActionError({ id: draft.id, message: json.message ?? "Failed to create post." })
+      } else {
+        setPromoteResults((prev) => ({
+          ...prev,
+          [draft.id]: {
+            postId:       json.postId!,
+            slug:         json.slug!,
+            alreadyExists: json.alreadyExists,
+          },
+        }))
+        router.refresh()
+      }
     } catch {
       setActionError({ id: draft.id, message: "Network error. Please try again." })
     } finally {
@@ -770,6 +808,8 @@ export default function DraftsClient({ drafts, sources }: Props) {
               const canDecide     = draft.status !== "approved" && draft.status !== "rejected"
               const isApproving   = actionLoading?.id === draft.id && actionLoading.action === "approve"
               const isRejecting   = actionLoading?.id === draft.id && actionLoading.action === "reject"
+              const isPromoting   = actionLoading?.id === draft.id && actionLoading.action === "promote"
+              const promoteResult = promoteResults[draft.id] ?? null
               const thisActionErr = actionError?.id === draft.id ? actionError.message : null
 
               return (
@@ -825,6 +865,20 @@ export default function DraftsClient({ drafts, sources }: Props) {
                       {/* Inline action error */}
                       {thisActionErr && (
                         <p role="alert" className="mt-2 text-xs text-red-400">{thisActionErr}</p>
+                      )}
+                      {/* Promote success */}
+                      {promoteResult && (
+                        <p className="mt-2 text-xs text-emerald-400">
+                          {promoteResult.alreadyExists
+                            ? "Already a post. "
+                            : "Post created. "}
+                          <a
+                            href="/admin/posts"
+                            className="font-medium underline underline-offset-2 transition-colors hover:text-emerald-300"
+                          >
+                            View in Posts →
+                          </a>
+                        </p>
                       )}
                     </div>
 
@@ -888,6 +942,18 @@ export default function DraftsClient({ drafts, sources }: Props) {
                           </button>
                         </>
                       )}
+
+                      {/* Create post — only for approved drafts */}
+                      {draft.status === "approved" && (
+                        <button
+                          type="button"
+                          onClick={() => handlePromote(draft)}
+                          disabled={!!actionLoading || !!promoteResult}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isPromoting ? "Creating post…" : promoteResult ? "Post created ✓" : "Create post"}
+                        </button>
+                      )}
                     </div>
 
                   </div>
@@ -938,7 +1004,7 @@ export default function DraftsClient({ drafts, sources }: Props) {
       {/* ── Footer note ───────────────────────────────────── */}
       <p className="border-t border-zinc-800/60 pt-4 text-xs text-zinc-700">
         Draft generation is not yet connected to a live AI model.
-        Approved drafts will automatically create posts in a future version.
+        Approve a draft, then click &ldquo;Create post&rdquo; to promote it to the Posts queue.
       </p>
 
     </div>
