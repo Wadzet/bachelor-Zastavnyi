@@ -87,6 +87,21 @@ export async function POST(
     )
   }
 
+  // ── 2b. Block interview promotion ─────────────────────────────────────────
+  // Interview posts require guest_data and qa_data which are not yet captured
+  // in the drafts workflow. Promoting an interview draft would create a broken
+  // public page. Block until an interview editor is implemented.
+
+  if (draft.content_type === "interview") {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Interview drafts require guest and Q&A data before promotion.",
+      },
+      { status: 400 },
+    )
+  }
+
   // ── 3. Duplicate prevention ───────────────────────────────────────────────
   // If a post already references this draft_id, return success with the
   // existing post rather than creating a duplicate.
