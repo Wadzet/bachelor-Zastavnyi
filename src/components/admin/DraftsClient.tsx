@@ -61,35 +61,12 @@ function sourceNameById(sources: Source[], id?: string): string | null {
   return sources.find((s) => s.id === id)?.name ?? null
 }
 
-// ─── Mock generation result ───────────────────────────────────────────────────
-// Generation remains frontend-only — no Supabase insert, no OpenAI call.
+// ─── Gemini model options ─────────────────────────────────────────────────────
 
-function buildGeneratedDraft(
-  input: string,
-  mode: "url" | "text",
-  type: ContentType,
-  topic: Topic | "",
-): Draft {
-  return {
-    id: "gen-preview",
-    title: "How Enterprises Are Closing the AI Adoption Gap in 2026",
-    excerpt:
-      "Despite significant investment in AI tooling, most enterprises report a widening gap between AI capability and operational adoption. The bottleneck is not technology — it is change management and process redesign.",
-    body:
-      "## The Adoption Paradox\n\n" +
-      "Enterprise AI spending reached record levels in 2026, yet fewer than a third of organisations report meaningful productivity gains from their deployments. The pattern is consistent: strong initial pilots, slow organisation-wide rollout, and a growing graveyard of proof-of-concepts that never reached production.\n\n" +
-      "## Where the Gap Lives\n\n" +
-      "The most common failure point is not the AI model itself. It is the handoff between AI output and the human workflow that consumes it. When AI tools are layered onto existing processes without redesigning those processes, the result is friction — not efficiency.\n\n" +
-      "## What Closing the Gap Requires\n\n" +
-      "Organisations making measurable progress treat AI adoption as an operational transformation project, not a technology deployment. They invest in process redesign before tooling, and in change management as heavily as in model selection.",
-    sourceUrl: mode === "url" && input.trim() ? input.trim() : undefined,
-    type,
-    topic: (topic || "AI Strategy") as Topic,
-    status: "review",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-}
+const GEMINI_MODELS: { value: string; label: string }[] = [
+  { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite — low cost"    },
+  { value: "gemini-2.5-flash",      label: "Gemini 2.5 Flash — better quality"   },
+]
 
 // ─── Shared input class ───────────────────────────────────────────────────────
 
@@ -443,12 +420,14 @@ export default function DraftsClient({ drafts, sources }: Props) {
   const router = useRouter()
 
   // ── Generator state ──────────────────────────────────────────────────────────
-  const [genMode, setGenMode]               = useState<"url" | "text">("url")
-  const [genInput, setGenInput]             = useState("")
-  const [genType, setGenType]               = useState<ContentType>("insight")
-  const [genTopic, setGenTopic]             = useState<Topic | "">("")
-  const [isGenerating, setIsGenerating]     = useState(false)
-  const [generatedDraft, setGeneratedDraft] = useState<Draft | null>(null)
+  const [genMode, setGenMode]           = useState<"url" | "text">("url")
+  const [genInput, setGenInput]         = useState("")
+  const [genType, setGenType]           = useState<ContentType>("insight")
+  const [genTopic, setGenTopic]         = useState<Topic | "">("")
+  const [genModel, setGenModel]         = useState("gemini-2.5-flash-lite")
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [genError, setGenError]         = useState<string | null>(null)
+  const [genSuccess, setGenSuccess]     = useState<string | null>(null)
 
   // ── List state ───────────────────────────────────────────────────────────────
   const [search, setSearch]               = useState("")
@@ -479,16 +458,52 @@ export default function DraftsClient({ drafts, sources }: Props) {
   const pendingCount  = drafts.filter((d) => d.status === "pending").length
   const approvedCount = drafts.filter((d) => d.status === "approved").length
 
-  // ── Generator handler — frontend-only, no persistence ────────────────────────
-  function handleGenerate() {
+  // ── Generator handler — calls real Gemini API via server route ───────────────
+  async function handleGenerate() {
     const trimmed = genInput.trim()
     if (!trimmed || isGenerating) return
+
     setIsGenerating(true)
-    setGeneratedDraft(null)
-    setTimeout(() => {
-      setGeneratedDraft(buildGeneratedDraft(trimmed, genMode, genType, genTopic))
+    setGenError(null)
+    setGenSuccess(null)
+
+    try {
+      const res = await fetch("/api/admin/drafts/generate", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode:  genMode,
+          input: trimmed,
+          type:  genType,
+          topic: genTopic || undefined,
+          model: genModel,
+        }),
+      })
+
+      const json = (await res.json()) as {
+        success: boolean
+        draftId?: string
+        title?:   string
+        message?: string
+      }
+
+      if (!json.success) {
+        setGenError(json.message ?? "Generation failed. Please try again.")
+        return
+      }
+
+      setGenSuccess(
+        json.title
+          ? `Draft created: "${json.title}"`
+          : "Draft created successfully.",
+      )
+      setGenInput("")
+      router.refresh()
+    } catch {
+      setGenError("Network error. Please try again.")
+    } finally {
       setIsGenerating(false)
-    }, 700)
+    }
   }
 
   // ── Edit handlers ────────────────────────────────────────────────────────────
@@ -728,6 +743,48 @@ export default function DraftsClient({ drafts, sources }: Props) {
             </div>
           </div>
 
+          {/* Model selector */}
+          <div>
+            <p className="mb-2 text-xs text-zinc-500">AI model</p>
+            <div className="flex flex-wrap gap-1.5">
+              {GEMINI_MODELS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setGenModel(value)}
+                  disabled={isGenerating}
+                  className={[
+                    "rounded-full px-3 py-1 text-xs font-medium transition-all duration-150 disabled:opacity-50",
+                    genModel === value
+                      ? "bg-zinc-700 text-white"
+                      : "border border-zinc-700 text-zinc-500 hover:text-zinc-300",
+                  ].join(" ")}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Error / success feedback */}
+          {genError && (
+            <p role="alert" className="text-xs text-red-400">
+              {genError}
+            </p>
+          )}
+          {genSuccess && (
+            <p role="status" className="text-xs text-emerald-400">
+              {genSuccess}{" "}
+              <button
+                type="button"
+                onClick={() => setGenSuccess(null)}
+                className="ml-1 text-zinc-600 transition-colors hover:text-zinc-400"
+              >
+                ✕
+              </button>
+            </p>
+          )}
+
           <div>
             <button
               type="button"
@@ -755,16 +812,6 @@ export default function DraftsClient({ drafts, sources }: Props) {
           </div>
         </div>
       </div>
-
-      {/* ── Generated draft result ────────────────────────── */}
-      {generatedDraft && (
-        <DraftPreview
-          draft={generatedDraft}
-          sources={sources}
-          onClose={() => setGeneratedDraft(null)}
-          isGenerated
-        />
-      )}
 
       {/* ── Controls: search + status filter ─────────────── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -1003,7 +1050,7 @@ export default function DraftsClient({ drafts, sources }: Props) {
 
       {/* ── Footer note ───────────────────────────────────── */}
       <p className="border-t border-zinc-800/60 pt-4 text-xs text-zinc-700">
-        Draft generation is not yet connected to a live AI model.
+        Draft generation uses Google Gemini. Generated drafts appear in the list below with status &ldquo;review&rdquo;.
         Approve a draft, then click &ldquo;Create post&rdquo; to promote it to the Posts queue.
       </p>
 
