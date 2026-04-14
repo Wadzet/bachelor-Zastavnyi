@@ -247,10 +247,11 @@ export async function POST(request: Request) {
     .insert({
       title:         generatedTitle,
       excerpt:       generatedExcerpt,
-      body:          generatedBody,
+      body_markdown: generatedBody,
       content_type:  type,
       topic:         trimmedTopic || "AI Strategy",
-      source_url:    mode === "url" ? trimmedInput : null,
+      source_url:    mode === "url"  ? trimmedInput : null,
+      raw_input:     mode === "text" ? trimmedInput : null,
       status:        "review",
     })
     .select("id, title")
