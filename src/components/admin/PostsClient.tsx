@@ -423,7 +423,21 @@ function PostPreviewPanel({ post, onClose }: { post: Post; onClose: () => void }
 
 // ─── Telegram preview panel ───────────────────────────────────────────────────
 
-function TelegramPreviewPanel({ post, onClose }: { post: Post; onClose: () => void }) {
+function TelegramPreviewPanel({
+  post,
+  onClose,
+  onReady,
+  onSend,
+  isLoading,
+  error,
+}: {
+  post:      Post
+  onClose:   () => void
+  onReady:   () => void
+  onSend:    () => void
+  isLoading: boolean
+  error:     string | null
+}) {
   const message  = buildTelegramMessage(post)
   const tgStatus = post.telegramStatus
 
@@ -470,7 +484,14 @@ function TelegramPreviewPanel({ post, onClose }: { post: Post; onClose: () => vo
         </p>
       )}
 
-      {/* Action — mock UI only, no backend call */}
+      {/* Inline error */}
+      {error && (
+        <p role="alert" className="mt-3 text-xs text-red-400">
+          {error}
+        </p>
+      )}
+
+      {/* Actions */}
       <div className="mt-4 border-t border-zinc-800/60 pt-4">
         {tgStatus === "sent" ? (
           <div className="flex items-center gap-2 text-xs text-zinc-500">
@@ -506,40 +527,45 @@ function TelegramPreviewPanel({ post, onClose }: { post: Post; onClose: () => vo
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
+            {/* Primary action: changes label based on current telegram status */}
             <button
               type="button"
-              onClick={() => {}}
-              className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/15 px-4 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/25"
+              disabled={isLoading || post.status !== "published"}
+              onClick={
+                tgStatus === "ready" || tgStatus === "failed"
+                  ? onSend
+                  : onReady
+              }
+              className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/15 px-4 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-3 w-3"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                />
-              </svg>
-              {tgStatus === "ready"
-                ? "Send to Telegram"
-                : tgStatus === "failed"
-                ? "Retry send"
-                : "Mark as ready"}
+              {isLoading ? (
+                <>
+                  <svg className="h-3 w-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  {tgStatus === "ready" || tgStatus === "failed" ? "Sending…" : "Marking ready…"}
+                </>
+              ) : (
+                <>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-3 w-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  {tgStatus === "ready"
+                    ? "Send to Telegram"
+                    : tgStatus === "failed"
+                    ? "Retry send"
+                    : "Mark as ready"}
+                </>
+              )}
             </button>
-            {!tgStatus && (
-              <button
-                type="button"
-                onClick={() => {}}
-                className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-800/50 px-4 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
-              >
-                Schedule
-              </button>
-            )}
           </div>
         )}
       </div>
@@ -678,6 +704,42 @@ export default function PostsClient({ posts }: Props) {
       const json = await res.json()
       if (!json.success) {
         setActionError({ id: post.id, message: json.message ?? "Failed to restore." })
+      } else {
+        router.refresh()
+      }
+    } catch {
+      setActionError({ id: post.id, message: "Network error. Please try again." })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleTelegramReady(post: Post) {
+    setActionLoading({ id: post.id, action: "tg-ready" })
+    setActionError(null)
+    try {
+      const res  = await fetch(`/api/admin/posts/${post.id}/telegram/ready`, { method: "POST" })
+      const json = await res.json()
+      if (!json.success) {
+        setActionError({ id: post.id, message: json.message ?? "Failed to mark as ready." })
+      } else {
+        router.refresh()
+      }
+    } catch {
+      setActionError({ id: post.id, message: "Network error. Please try again." })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleTelegramSend(post: Post) {
+    setActionLoading({ id: post.id, action: "tg-send" })
+    setActionError(null)
+    try {
+      const res  = await fetch(`/api/admin/posts/${post.id}/telegram/send`, { method: "POST" })
+      const json = await res.json()
+      if (!json.success) {
+        setActionError({ id: post.id, message: json.message ?? "Failed to send to Telegram." })
       } else {
         router.refresh()
       }
@@ -1050,6 +1112,15 @@ export default function PostsClient({ posts }: Props) {
               <TelegramPreviewPanel
                 post={selectedPost}
                 onClose={() => setSelectedPost(null)}
+                onReady={() => handleTelegramReady(selectedPost)}
+                onSend={() => handleTelegramSend(selectedPost)}
+                isLoading={
+                  actionLoading?.id === selectedPost.id &&
+                  (actionLoading.action === "tg-ready" || actionLoading.action === "tg-send")
+                }
+                error={
+                  actionError?.id === selectedPost.id ? actionError.message : null
+                }
               />
             ) : selectedPost ? (
               <PostPreviewPanel
@@ -1063,8 +1134,10 @@ export default function PostsClient({ posts }: Props) {
 
       {/* ── Footer note ───────────────────────────────────── */}
       <p className="border-t border-zinc-800/60 pt-4 text-xs text-zinc-700">
-        Telegram distribution is not yet active.
-        Telegram actions are mock UI — no data is sent to Telegram.
+        Telegram distribution requires a published post and{" "}
+        <span className="font-mono">TELEGRAM_BOT_TOKEN</span> +{" "}
+        <span className="font-mono">TELEGRAM_CHAT_ID</span> in{" "}
+        <span className="font-mono">.env.local</span>.
       </p>
 
     </div>
