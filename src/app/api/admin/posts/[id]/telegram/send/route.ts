@@ -24,7 +24,7 @@ function buildMessage(
   const shortExcerpt =
     excerpt.length > 140 ? excerpt.slice(0, 137) + "…" : excerpt
 
-  // Plain text — no HTML tags needed, compatible with parse_mode: HTML
+  // Plain text — safe for any post content regardless of special characters
   return (
     `New ${label} from ${BRAND.name}:\n\n` +
     `${title}\n\n` +
