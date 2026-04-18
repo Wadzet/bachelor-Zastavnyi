@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerClient } from "@/lib/supabase/server"
 import { getGeminiClient, resolveModel, SUPPORTED_MODELS } from "@/lib/gemini/client"
+import { requireAdminApiAuth } from "@/lib/auth/admin"
 
 // Temporary MVP admin route. Must be protected by auth before production.
 
@@ -75,6 +76,9 @@ Do not include any text before or after the JSON object.`
 // ─── POST /api/admin/drafts/generate ─────────────────────────────────────────
 
 export async function POST(request: Request) {
+  const authError = await requireAdminApiAuth()
+  if (authError) return authError
+
   // ── Parse body ───────────────────────────────────────────────────────────────
   let body: unknown
   try {

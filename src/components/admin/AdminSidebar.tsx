@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { BRAND } from "@/config/brand"
+import LogoutButton from "@/components/admin/LogoutButton"
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -116,8 +117,8 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps) {
         </ul>
       </nav>
 
-      {/* Footer: view public site */}
-      <div className="shrink-0 border-t border-zinc-800 px-3 py-4">
+      {/* Footer: view public site + sign out */}
+      <div className="shrink-0 border-t border-zinc-800 px-3 py-4 space-y-0.5">
         <Link
           href="/"
           target="_blank"
@@ -127,6 +128,7 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps) {
           <IconExternal />
           View public site
         </Link>
+        <LogoutButton />
       </div>
     </aside>
   )

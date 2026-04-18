@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerClient } from "@/lib/supabase/server"
 import { sendTelegramMessage } from "@/lib/telegram/client"
 import { BRAND } from "@/config/brand"
+import { requireAdminApiAuth } from "@/lib/auth/admin"
 
 // Temporary MVP admin route. Must be protected by auth before production.
 
@@ -39,6 +40,9 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const authError = await requireAdminApiAuth()
+  if (authError) return authError
+
   const { id } = await params
   const supabase = getServerClient()
 

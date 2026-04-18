@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getServerClient } from "@/lib/supabase/server"
+import { requireAdminApiAuth } from "@/lib/auth/admin"
 
 // Temporary MVP admin route. Must be protected by auth before production.
 
@@ -8,6 +9,9 @@ const VALID_STATUSES = ["active", "paused", "error"] as const
 const URL_RE         = /^https?:\/\/.+/
 
 export async function POST(request: Request) {
+  const authError = await requireAdminApiAuth()
+  if (authError) return authError
+
   let body: unknown
   try {
     body = await request.json()

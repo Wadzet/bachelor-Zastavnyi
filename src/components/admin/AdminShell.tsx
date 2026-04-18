@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { usePathname } from "next/navigation"
 import AdminSidebar from "@/components/admin/AdminSidebar"
 import AdminHeader from "@/components/admin/AdminHeader"
 
@@ -9,7 +10,13 @@ type AdminShellProps = {
 }
 
 export default function AdminShell({ children }: AdminShellProps) {
+  const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Login page renders without the admin shell (no sidebar/header)
+  if (pathname === "/admin/login") {
+    return <>{children}</>
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
