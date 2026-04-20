@@ -51,8 +51,12 @@ export async function middleware(request: NextRequest) {
   const isAdminApi  = pathname.startsWith("/api/admin")
 
   if (isAdminPage || isAdminApi) {
-    const isAdmin =
-      !!user?.email && isAllowedAdminEmail(user.email)
+    const hasUser     = !!user?.email
+    const emailAllowed = hasUser && isAllowedAdminEmail(user.email!)
+    const isAdmin     = hasUser && emailAllowed
+
+    // Debug-safe: no tokens, cookies, or env values logged
+    console.log(`[middleware] ${pathname} — hasUser: ${hasUser}, emailAllowed: ${emailAllowed}`)
 
     if (!isAdmin) {
       // API routes → 401 JSON
@@ -71,12 +75,13 @@ export async function middleware(request: NextRequest) {
 }
 
 // ─── Matcher ──────────────────────────────────────────────────────────────────
-// Runs on all /admin/* and /api/admin/* paths.
-// Excludes static assets and Next.js internals automatically via the pattern.
+// /admin(.*)   — matches /admin exactly AND /admin/anything (fixes bare /admin gap)
+// /api/admin(.*)  — matches all admin API routes
+// Note: /admin/:path* does NOT reliably match the bare /admin path in Next.js.
 
 export const config = {
   matcher: [
-    "/admin/:path*",
-    "/api/admin/:path*",
+    "/admin(.*)",
+    "/api/admin(.*)",
   ],
 }
