@@ -78,7 +78,12 @@ export type Draft = {
 }
 
 export type PostStatus = "draft" | "review" | "published" | "archived"
-export type TelegramStatus = "ready" | "scheduled" | "sent" | "failed"
+
+// Distribution channel statuses — shared by Telegram and LinkedIn.
+// "pending" exists in the DB enum but is intentionally excluded here:
+// a pending job has not yet been queued and is treated as absent in the UI.
+export type TelegramStatus  = "ready" | "scheduled" | "sent" | "failed"
+export type LinkedInStatus  = "ready" | "scheduled" | "sent" | "failed"
 
 export type Post = {
   id: string
@@ -95,4 +100,5 @@ export type Post = {
   createdAt: string    // ISO date
   updatedAt: string    // ISO date
   telegramStatus?: TelegramStatus
+  linkedinStatus?: LinkedInStatus
 }

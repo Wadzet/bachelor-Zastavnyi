@@ -10,6 +10,7 @@ import type {
   Post,
   PostStatus,
   TelegramStatus,
+  LinkedInStatus,
   Topic,
 } from "@/types"
 
@@ -58,9 +59,11 @@ type PostRow = {
   cover_image_url: string | null
 }
 
-// Minimal shape fetched from distribution_jobs for telegram status merging.
-type TelegramJobRow = {
+// Minimal shape fetched from distribution_jobs for channel status merging.
+// Used for both telegram and linkedin rows.
+type DistributionJobRow = {
   post_id: string
+  channel: string
   status: string
 }
 
@@ -110,16 +113,20 @@ function mapDraftRow(row: DraftRow): Draft {
 }
 
 // channel_status "pending" exists in the DB enum but is absent from the
-// TypeScript TelegramStatus union. A job that is still pending has not yet
-// been queued for distribution — treat it the same as no job at all.
-const VALID_TELEGRAM_STATUSES = new Set<string>(["ready", "scheduled", "sent", "failed"])
+// TypeScript status unions. A job that is still pending has not yet been
+// queued for distribution — treat it the same as no job at all.
+const VALID_CHANNEL_STATUSES = new Set<string>(["ready", "scheduled", "sent", "failed"])
 
-function toTelegramStatus(dbStatus: string | null | undefined): TelegramStatus | undefined {
-  if (!dbStatus || !VALID_TELEGRAM_STATUSES.has(dbStatus)) return undefined
+function toChannelStatus(dbStatus: string | null | undefined): TelegramStatus | undefined {
+  if (!dbStatus || !VALID_CHANNEL_STATUSES.has(dbStatus)) return undefined
   return dbStatus as TelegramStatus
 }
 
-function mapPostRow(row: PostRow, telegramDbStatus: string | null | undefined): Post {
+function mapPostRow(
+  row:               PostRow,
+  telegramDbStatus:  string | null | undefined,
+  linkedinDbStatus:  string | null | undefined,
+): Post {
   return {
     id:             row.id,
     title:          row.title,
@@ -134,25 +141,31 @@ function mapPostRow(row: PostRow, telegramDbStatus: string | null | undefined): 
     publishedAt:    row.published_at ?? undefined,
     createdAt:      row.created_at,
     updatedAt:      row.updated_at,
-    telegramStatus: toTelegramStatus(telegramDbStatus),
+    telegramStatus: toChannelStatus(telegramDbStatus),
+    linkedinStatus: toChannelStatus(linkedinDbStatus) as LinkedInStatus | undefined,
   }
 }
 
-// Build a post_id → channel_status lookup map from telegram distribution jobs.
-function buildTelegramIndex(jobs: TelegramJobRow[]): Map<string, string> {
-  return new Map(jobs.map((j) => [j.post_id, j.status]))
+// Build a post_id → channel_status lookup map for a specific channel.
+function buildChannelIndex(jobs: DistributionJobRow[], channel: string): Map<string, string> {
+  return new Map(
+    jobs
+      .filter((j) => j.channel === channel)
+      .map((j) => [j.post_id, j.status]),
+  )
 }
 
-// Shared helper: fetch all telegram distribution jobs (no post_id filter).
+// Shared helper: fetch all distribution jobs for both telegram and linkedin.
 // Used by list functions that need to annotate multiple posts at once.
-async function fetchAllTelegramJobs(): Promise<TelegramJobRow[]> {
+// Fetching both channels in one query avoids two round-trips.
+async function fetchAllDistributionJobs(): Promise<DistributionJobRow[]> {
   const supabase = getServerClient()
   const { data, error } = await supabase
     .from("distribution_jobs")
-    .select("post_id, status")
-    .eq("channel", "telegram")
+    .select("post_id, channel, status")
+    .in("channel", ["telegram", "linkedin"])
   if (error) throw error
-  return (data ?? []) as unknown as TelegramJobRow[]
+  return (data ?? []) as unknown as DistributionJobRow[]
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -211,12 +224,12 @@ export async function getAdminRecentDrafts(limit = 4): Promise<Draft[]> {
 export async function getAdminRecentPosts(limit = 5): Promise<Post[]> {
   const supabase = getServerClient()
 
-  // Fetch the most-recently-updated posts AND all telegram jobs in parallel.
-  // We fetch all telegram jobs (not just for these posts) because the result
-  // set is small and it avoids a subquery / IN filter.
+  // Fetch the most-recently-updated posts AND all distribution jobs in parallel.
+  // We fetch all jobs (not just for these posts) because the result set is small
+  // and it avoids a subquery / IN filter.
   const [
     { data: postRows, error: postErr },
-    telegramRows,
+    allJobs,
   ] = await Promise.all([
     supabase
       .from("posts")
@@ -227,15 +240,18 @@ export async function getAdminRecentPosts(limit = 5): Promise<Post[]> {
       )
       .order("updated_at", { ascending: false })
       .limit(limit),
-    fetchAllTelegramJobs(),
+    fetchAllDistributionJobs(),
   ])
 
   if (postErr) throw postErr
 
-  const telegramIndex = buildTelegramIndex(telegramRows)
+  const telegramIndex = buildChannelIndex(allJobs, "telegram")
+  const linkedinIndex = buildChannelIndex(allJobs, "linkedin")
   const rows = (postRows ?? []) as unknown as PostRow[]
 
-  return rows.map((row) => mapPostRow(row, telegramIndex.get(row.id)))
+  return rows.map((row) =>
+    mapPostRow(row, telegramIndex.get(row.id), linkedinIndex.get(row.id)),
+  )
 }
 
 // ─── Sources ──────────────────────────────────────────────────────────────────
@@ -288,11 +304,11 @@ export async function getAdminDraftById(id: string): Promise<Draft | null> {
 
 // ─── Posts ────────────────────────────────────────────────────────────────────
 //
-// Telegram distribution state lives in distribution_jobs, not in posts.
+// Distribution state lives in distribution_jobs, not in posts.
 // Strategy:
 //   1. Fetch all posts ordered by updated_at DESC.
-//   2. Fetch all telegram distribution_jobs (channel = 'telegram').
-//   3. Build a Map<post_id, channel_status> and merge during mapping.
+//   2. Fetch all distribution_jobs for telegram + linkedin in one query.
+//   3. Build separate Map<post_id, channel_status> per channel and merge during mapping.
 //
 // This avoids complex Supabase embedded-relation filters and keeps the
 // mapping logic explicit and easy to reason about.
@@ -302,7 +318,7 @@ export async function getAdminPosts(): Promise<Post[]> {
 
   const [
     { data: postRows, error: postErr },
-    telegramRows,
+    allJobs,
   ] = await Promise.all([
     supabase
       .from("posts")
@@ -312,24 +328,28 @@ export async function getAdminPosts(): Promise<Post[]> {
         "body_markdown, featured, cover_image_url",
       )
       .order("updated_at", { ascending: false }),
-    fetchAllTelegramJobs(),
+    fetchAllDistributionJobs(),
   ])
 
   if (postErr) throw postErr
 
-  const telegramIndex = buildTelegramIndex(telegramRows)
+  const telegramIndex = buildChannelIndex(allJobs, "telegram")
+  const linkedinIndex = buildChannelIndex(allJobs, "linkedin")
   const rows = (postRows ?? []) as unknown as PostRow[]
 
-  return rows.map((row) => mapPostRow(row, telegramIndex.get(row.id)))
+  return rows.map((row) =>
+    mapPostRow(row, telegramIndex.get(row.id), linkedinIndex.get(row.id)),
+  )
 }
 
 export async function getAdminPostById(id: string): Promise<Post | null> {
   const supabase = getServerClient()
 
-  // For a single post, fetch only the telegram job for that specific post_id.
+  // For a single post, fetch only distribution jobs for that specific post_id.
+  // Fetch both channels (telegram + linkedin) in one query.
   const [
-    { data: postRow, error: postErr },
-    { data: telegramRow, error: tgErr },
+    { data: postRow,       error: postErr },
+    { data: distributionRows, error: distErr },
   ] = await Promise.all([
     supabase
       .from("posts")
@@ -342,18 +362,18 @@ export async function getAdminPostById(id: string): Promise<Post | null> {
       .maybeSingle(),
     supabase
       .from("distribution_jobs")
-      .select("post_id, status")
-      .eq("channel", "telegram")
+      .select("post_id, channel, status")
       .eq("post_id", id)
-      .maybeSingle(),
+      .in("channel", ["telegram", "linkedin"]),
   ])
 
-  if (postErr) throw postErr
-  if (tgErr)   throw tgErr
+  if (postErr)  throw postErr
+  if (distErr)  throw distErr
   if (!postRow) return null
 
-  return mapPostRow(
-    postRow as unknown as PostRow,
-    (telegramRow as unknown as TelegramJobRow | null)?.status ?? null,
-  )
+  const jobs = (distributionRows ?? []) as unknown as DistributionJobRow[]
+  const telegramStatus = jobs.find((j) => j.channel === "telegram")?.status ?? null
+  const linkedinStatus = jobs.find((j) => j.channel === "linkedin")?.status ?? null
+
+  return mapPostRow(postRow as unknown as PostRow, telegramStatus, linkedinStatus)
 }
