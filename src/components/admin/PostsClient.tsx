@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { BRAND } from "@/config/brand"
 import SearchBar from "@/components/ui/SearchBar"
@@ -599,15 +599,23 @@ function TelegramPreviewPanel({
   )
 }
 
-// ─── LinkedIn preview panel ───────────────────────────────────────────────────
-// No LinkedIn API calls — distribution is manual for MVP.
-// Admin copies the generated text, opens LinkedIn share, and manually pastes.
+// ─── LinkedIn distribution panel ──────────────────────────────────────────────
+// Supports both real API posting (when LinkedIn is connected via OAuth)
+// and manual copy/share fallback (always available as a backup).
+
+type ConnStatus = {
+  connected:    boolean
+  expired?:     boolean
+  displayName?: string
+  expiresAt?:   string
+}
 
 function LinkedInPreviewPanel({
   post,
   onClose,
   onReady,
   onShared,
+  onSend,
   isLoading,
   error,
 }: {
@@ -615,10 +623,24 @@ function LinkedInPreviewPanel({
   onClose:   () => void
   onReady:   () => void
   onShared:  () => void
+  onSend:    () => void
   isLoading: boolean
   error:     string | null
 }) {
-  const [copied, setCopied] = useState(false)
+  const [copied,      setCopied]      = useState(false)
+  const [connStatus,  setConnStatus]  = useState<ConnStatus | null>(null)
+  const [connLoading, setConnLoading] = useState(true)
+
+  // Fetch LinkedIn connection status when panel mounts.
+  // Re-fetches on every panel open since useEffect runs on each mount.
+  useEffect(() => {
+    fetch("/api/admin/linkedin/status")
+      .then((r) => r.json())
+      .then((data: ConnStatus) => setConnStatus(data))
+      .catch(() => setConnStatus({ connected: false }))
+      .finally(() => setConnLoading(false))
+  }, [])
+
   const text     = buildLinkedInText(post)
   const shareUrl = buildLinkedInShareUrl(post)
   const liStatus = post.linkedinStatus
@@ -629,17 +651,20 @@ function LinkedInPreviewPanel({
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Clipboard API unavailable (non-HTTPS dev context) — fail silently
+      // Clipboard API unavailable in non-HTTPS contexts — fail silently
     }
   }
 
+  const isConnected = !connLoading && !!connStatus?.connected
+
   return (
     <div className="rounded-xl border border-sky-400/15 bg-sky-950/20 p-5">
+
       {/* Header row */}
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-sky-400">
-            LinkedIn preview
+            LinkedIn distribution
           </p>
           {liStatus && <StatusBadge status={liStatus} />}
         </div>
@@ -647,20 +672,44 @@ function LinkedInPreviewPanel({
           type="button"
           onClick={onClose}
           className="mt-0.5 shrink-0 text-zinc-600 transition-colors hover:text-white"
-          aria-label="Close LinkedIn preview"
+          aria-label="Close LinkedIn panel"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
+
+      {/* Connection status indicator */}
+      {!connLoading && (
+        <div className={[
+          "mb-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs",
+          isConnected
+            ? "border-emerald-700/30 bg-emerald-900/20"
+            : "border-zinc-700/40 bg-zinc-800/60",
+        ].join(" ")}>
+          <span className={[
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            isConnected ? "bg-emerald-400" : "bg-zinc-600",
+          ].join(" ")} />
+          {isConnected ? (
+            <span className="text-emerald-300">
+              Connected{connStatus?.displayName ? ` as ${connStatus.displayName}` : ""}
+            </span>
+          ) : connStatus?.expired ? (
+            <span className="text-amber-400">Token expired — reconnect LinkedIn</span>
+          ) : (
+            <span className="text-zinc-500">LinkedIn not connected</span>
+          )}
+        </div>
+      )}
+
+      {/* Note for unpublished posts */}
+      {post.status !== "published" && (
+        <p className="mb-3 text-xs text-amber-500/70">
+          This post isn&apos;t published yet. Publish it before distributing via LinkedIn.
+        </p>
+      )}
 
       {/* Text preview */}
       <div className="rounded-lg bg-zinc-800/80 px-4 py-3">
@@ -668,19 +717,6 @@ function LinkedInPreviewPanel({
           {text}
         </p>
       </div>
-
-      {/* Note for unpublished posts */}
-      {post.status !== "published" && (
-        <p className="mt-3 text-xs text-amber-500/70">
-          This post isn&apos;t published yet. Publish it before distributing via LinkedIn.
-        </p>
-      )}
-
-      {/* Manual workflow note */}
-      <p className="mt-3 text-[11px] leading-relaxed text-zinc-600">
-        Copy the text above, then open LinkedIn to paste and share manually.
-        Click &ldquo;Mark as shared&rdquo; after posting to record the distribution.
-      </p>
 
       {/* Inline error */}
       {error && (
@@ -693,14 +729,7 @@ function LinkedInPreviewPanel({
       <div className="mt-4 border-t border-zinc-800/60 pt-4">
         {liStatus === "sent" ? (
           <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-3.5 w-3.5 text-emerald-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
             Already shared on LinkedIn
@@ -708,62 +737,38 @@ function LinkedInPreviewPanel({
         ) : (
           <div className="flex flex-wrap gap-2">
 
-            {/* Copy text */}
+            {/* Copy text — always available */}
             <button
               type="button"
               onClick={handleCopy}
               className="inline-flex items-center gap-1.5 rounded-full border border-zinc-600/50 bg-zinc-800/60 px-4 py-1.5 text-xs font-semibold text-zinc-300 transition-colors hover:bg-zinc-700/60"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-3 w-3"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
               {copied ? "Copied!" : "Copy text"}
             </button>
 
-            {/* Open LinkedIn share */}
+            {/* Open LinkedIn share — always available */}
             <a
               href={shareUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/15 px-4 py-1.5 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-500/25"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-3 w-3"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
               Open LinkedIn ↗
             </a>
 
-            {/* Mark LinkedIn ready (if no status yet) */}
-            {!liStatus && (
+            {/* ── Connected: Post to LinkedIn via API ─────────────────────── */}
+            {isConnected && (
               <button
                 type="button"
                 disabled={isLoading || post.status !== "published"}
-                onClick={onReady}
-                className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/15 px-4 py-1.5 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={onSend}
+                className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/40 bg-sky-500/20 px-4 py-1.5 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-500/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLoading ? (
                   <>
@@ -771,13 +776,45 @@ function LinkedInPreviewPanel({
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Marking ready…
+                    Posting…
                   </>
-                ) : "Mark LinkedIn ready"}
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                    Post to LinkedIn
+                  </>
+                )}
               </button>
             )}
 
-            {/* Mark as shared (once ready) */}
+            {/* ── Not connected: Connect LinkedIn button ───────────────────── */}
+            {!connLoading && !isConnected && (
+              <a
+                href="/api/admin/linkedin/connect"
+                className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/15 px-4 py-1.5 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-500/25"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                </svg>
+                Connect LinkedIn
+              </a>
+            )}
+
+            {/* ── Manual fallback: mark as ready (no status, not connected) ── */}
+            {!liStatus && !connLoading && !isConnected && (
+              <button
+                type="button"
+                disabled={isLoading || post.status !== "published"}
+                onClick={onReady}
+                className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/20 bg-sky-500/10 px-4 py-1.5 text-xs font-semibold text-sky-400/80 transition-colors hover:bg-sky-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isLoading ? "Marking…" : "Mark ready"}
+              </button>
+            )}
+
+            {/* ── Manual fallback: mark as shared (status = ready) ─────────── */}
             {liStatus === "ready" && (
               <button
                 type="button"
@@ -785,25 +822,9 @@ function LinkedInPreviewPanel({
                 onClick={onShared}
                 className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isLoading ? (
+                {isLoading ? "Saving…" : (
                   <>
-                    <svg className="h-3 w-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Saving…
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-3 w-3"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      aria-hidden="true"
-                    >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                     Mark as shared
@@ -815,6 +836,16 @@ function LinkedInPreviewPanel({
           </div>
         )}
       </div>
+
+      {/* Footer note — context-sensitive */}
+      {liStatus !== "sent" && !connLoading && (
+        <p className="mt-3 text-[11px] leading-relaxed text-zinc-700">
+          {isConnected
+            ? "Use “Post to LinkedIn” for direct API posting, or copy the text and share manually as a fallback."
+            : "Connect LinkedIn for one-click posting, or use copy/open to share manually."}
+        </p>
+      )}
+
     </div>
   )
 }
@@ -1036,6 +1067,24 @@ export default function PostsClient({ posts }: Props) {
       const json = await res.json()
       if (!json.success) {
         setActionError({ id: post.id, message: json.message ?? "Failed to record LinkedIn share." })
+      } else {
+        router.refresh()
+      }
+    } catch {
+      setActionError({ id: post.id, message: "Network error. Please try again." })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleLinkedInSend(post: Post) {
+    setActionLoading({ id: post.id, action: "li-send" })
+    setActionError(null)
+    try {
+      const res  = await fetch(`/api/admin/posts/${post.id}/linkedin/send`, { method: "POST" })
+      const json = await res.json()
+      if (!json.success) {
+        setActionError({ id: post.id, message: json.message ?? "Failed to post to LinkedIn." })
       } else {
         router.refresh()
       }
@@ -1483,9 +1532,14 @@ export default function PostsClient({ posts }: Props) {
                 onClose={() => setSelectedPost(null)}
                 onReady={() => handleLinkedInReady(selectedPost)}
                 onShared={() => handleLinkedInShared(selectedPost)}
+                onSend={() => handleLinkedInSend(selectedPost)}
                 isLoading={
                   actionLoading?.id === selectedPost.id &&
-                  (actionLoading.action === "li-ready" || actionLoading.action === "li-shared")
+                  (
+                    actionLoading.action === "li-ready" ||
+                    actionLoading.action === "li-shared" ||
+                    actionLoading.action === "li-send"
+                  )
                 }
                 error={
                   actionError?.id === selectedPost.id ? actionError.message : null
@@ -1507,7 +1561,7 @@ export default function PostsClient({ posts }: Props) {
         <span className="font-mono">TELEGRAM_BOT_TOKEN</span> +{" "}
         <span className="font-mono">TELEGRAM_CHAT_ID</span> in{" "}
         <span className="font-mono">.env.local</span>.{" "}
-        LinkedIn distribution is manual — copy the generated text and share directly on LinkedIn.
+        LinkedIn: connect your account for direct API posting, or use copy/share for manual distribution.
       </p>
 
     </div>
