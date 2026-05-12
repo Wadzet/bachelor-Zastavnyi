@@ -72,6 +72,32 @@ export function getServerClient(): SupabaseClient {
     )
   }
 
+  // ── Sanity-check: verify this is actually the service role key ──────────────
+  // Both the service role key and the anon key are valid JWTs, but only the
+  // service role key carries role:"service_role" in its payload, which tells
+  // PostgREST to bypass RLS entirely. If the keys are accidentally swapped in
+  // .env.local, every DB write to a RLS-protected table will fail with:
+  //   "new row violates row-level security policy"
+  // This check logs a clear warning at startup without exposing the key value.
+  try {
+    const parts = serviceRoleKey.split(".")
+    if (parts.length === 3) {
+      const payload = JSON.parse(
+        Buffer.from(parts[1], "base64url").toString("utf-8"),
+      ) as Record<string, unknown>
+      if (payload.role !== "service_role") {
+        console.error(
+          `[Supabase] ⚠️  SUPABASE_SERVICE_ROLE_KEY has role="${String(payload.role ?? "unknown")}" — ` +
+          `expected "service_role". This key will NOT bypass RLS. ` +
+          `Check .env.local: service_role key is at ` +
+          `Supabase Dashboard → Project Settings → API → service_role secret.`,
+        )
+      }
+    }
+  } catch {
+    // Non-fatal: if JWT decoding fails, proceed — the key may still be valid.
+  }
+
   _client = createClient(url, serviceRoleKey, {
     auth: {
       // Server-side service role clients do not need session persistence.
