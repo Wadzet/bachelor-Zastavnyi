@@ -19,9 +19,27 @@ export async function generateMetadata({
   const { slug } = await params
   const insight = await getInsightBySlug(slug)
   if (!insight) return { title: `Not Found — ${BRAND.name}` }
+
+  const ogImage = insight.coverImage
+    ? [{ url: insight.coverImage, width: 1600, height: 900, alt: insight.title }]
+    : []
+
   return {
-    title: `${insight.title} — ${BRAND.name}`,
+    title:       `${insight.title} — ${BRAND.name}`,
     description: insight.excerpt,
+    openGraph: {
+      title:       `${insight.title} — ${BRAND.name}`,
+      description: insight.excerpt,
+      type:        "article",
+      url:         `${BRAND.siteUrl}/insights/${slug}`,
+      ...(ogImage.length > 0 ? { images: ogImage } : {}),
+    },
+    twitter: {
+      card:        insight.coverImage ? "summary_large_image" : "summary",
+      title:       `${insight.title} — ${BRAND.name}`,
+      description: insight.excerpt,
+      ...(insight.coverImage ? { images: [insight.coverImage] } : {}),
+    },
   }
 }
 
@@ -57,8 +75,21 @@ export default async function InsightDetailPage({
           publishedAt={insight.publishedAt}
         />
 
+        {/* Cover image */}
+        {insight.coverImage && (
+          <div className="mb-10 overflow-hidden rounded-2xl border border-zinc-800">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={insight.coverImage}
+              alt={`Cover image for ${insight.title}`}
+              className="w-full object-cover"
+              style={{ aspectRatio: "16/9" }}
+            />
+          </div>
+        )}
+
         {/* Divider */}
-        <div className="mb-10 border-t border-zinc-800/60" />
+        {!insight.coverImage && <div className="mb-10 border-t border-zinc-800/60" />}
 
         {/* Article body */}
         <ArticleBody body={insight.body} />
