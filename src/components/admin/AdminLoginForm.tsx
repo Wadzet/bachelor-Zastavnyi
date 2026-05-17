@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { getAuthBrowserClient } from "@/lib/supabase/auth-client"
-import { BRAND } from "@/config/brand"
+import Logo from "@/components/brand/Logo"
 
 const inputCls =
   "w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white " +
@@ -52,10 +52,10 @@ export default function AdminLoginForm() {
 
         {/* Brand header */}
         <div className="mb-8 text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">
-            {BRAND.name}
-          </p>
-          <h1 className="mt-2 text-2xl font-bold text-white">Admin login</h1>
+          <div className="flex justify-center">
+            <Logo className="h-8" />
+          </div>
+          <h1 className="mt-3 text-2xl font-bold text-white">Admin login</h1>
           <p className="mt-1.5 text-sm text-zinc-500">
             Sign in with your admin credentials to continue.
           </p>

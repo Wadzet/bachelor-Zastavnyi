@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { BRAND } from "@/config/brand"
+import Logo from "@/components/brand/Logo"
 
 const navLinks = [
   { label: "Insights", href: "/insights" },
@@ -11,11 +11,8 @@ export default function Header() {
     <header className="sticky top-0 z-40 border-b border-zinc-800/60 bg-zinc-950/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         {/* Wordmark */}
-        <Link
-          href="/"
-          className="text-xl font-bold tracking-tight text-white transition-colors hover:text-zinc-300"
-        >
-          {BRAND.name}
+        <Link href="/" aria-label="BizInsight — home">
+          <Logo className="h-7 transition-opacity hover:opacity-80" />
         </Link>
 
         {/* Navigation */}
