@@ -374,7 +374,19 @@ function EditPanel({
 
 // ─── Post preview panel ───────────────────────────────────────────────────────
 
-function PostPreviewPanel({ post, onClose }: { post: Post; onClose: () => void }) {
+function PostPreviewPanel({
+  post,
+  onClose,
+  onGenerateImage,
+  isGenerating,
+  generateError,
+}: {
+  post:            Post
+  onClose:         () => void
+  onGenerateImage: () => void
+  isGenerating:    boolean
+  generateError:   string | null
+}) {
   const path = publicUrlPath(post)
 
   return (
@@ -411,6 +423,18 @@ function PostPreviewPanel({ post, onClose }: { post: Post; onClose: () => void }
         </button>
       </div>
 
+      {/* Cover image preview */}
+      {post.coverImage && (
+        <div className="mb-4 overflow-hidden rounded-lg border border-zinc-800">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={post.coverImage}
+            alt={`Cover image for ${post.title}`}
+            className="h-40 w-full object-cover"
+          />
+        </div>
+      )}
+
       {/* Title + excerpt */}
       <h3 className="text-sm font-bold leading-snug text-white">{post.title}</h3>
       <p className="mt-2 text-xs leading-relaxed text-zinc-400">{post.excerpt}</p>
@@ -442,6 +466,42 @@ function PostPreviewPanel({ post, onClose }: { post: Post; onClose: () => void }
       <div className="mt-3 space-y-0.5 text-xs text-zinc-700">
         {post.publishedAt && <p>Published {formatDate(post.publishedAt)}</p>}
         <p>Updated {formatDate(post.updatedAt)}</p>
+      </div>
+
+      {/* Generate cover image */}
+      <div className="mt-4 border-t border-zinc-800/60 pt-4">
+        {generateError && (
+          <p role="alert" className="mb-3 text-xs text-red-400">
+            {generateError}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={onGenerateImage}
+          disabled={isGenerating}
+          className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-1.5 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isGenerating ? (
+            <>
+              <svg className="h-3 w-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Generating…
+            </>
+          ) : (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {post.coverImage ? "Regenerate cover" : "Generate cover"}
+            </>
+          )}
+        </button>
+        <p className="mt-2 text-[10px] leading-relaxed text-zinc-700">
+          AI-generated cover image using Gemini. Image is saved to Supabase Storage
+          and the post record is updated automatically.
+        </p>
       </div>
     </div>
   )
@@ -1102,6 +1162,29 @@ export default function PostsClient({ posts }: Props) {
     }
   }
 
+  async function handleGenerateImage(post: Post) {
+    setActionLoading({ id: post.id, action: "img-generate" })
+    setActionError(null)
+    try {
+      const res  = await fetch(`/api/admin/posts/${post.id}/image/generate`, { method: "POST" })
+      const json = await res.json()
+      if (!json.success) {
+        setActionError({ id: post.id, message: json.message ?? "Failed to generate image." })
+      } else {
+        // Optimistically update coverImage in selectedPost so the preview shows
+        // immediately — before router.refresh() completes.
+        setSelectedPost((prev) =>
+          prev?.id === post.id ? { ...prev, coverImage: json.imageUrl as string } : prev,
+        )
+        router.refresh()
+      }
+    } catch {
+      setActionError({ id: post.id, message: "Network error. Please try again." })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   // ── Derived layout flag ───────────────────────────────────────────────────────
   const showRightPanel = !!(editingPost ?? selectedPost)
 
@@ -1572,10 +1655,23 @@ export default function PostsClient({ posts }: Props) {
                 )
               })()
             ) : selectedPost ? (
-              <PostPreviewPanel
-                post={posts.find((p) => p.id === selectedPost.id) ?? selectedPost}
-                onClose={() => setSelectedPost(null)}
-              />
+              (() => {
+                const activePost = posts.find((p) => p.id === selectedPost.id) ?? selectedPost
+                return (
+                  <PostPreviewPanel
+                    post={activePost}
+                    onClose={() => setSelectedPost(null)}
+                    onGenerateImage={() => handleGenerateImage(activePost)}
+                    isGenerating={
+                      actionLoading?.id === activePost.id &&
+                      actionLoading.action === "img-generate"
+                    }
+                    generateError={
+                      actionError?.id === activePost.id ? actionError.message : null
+                    }
+                  />
+                )
+              })()
             ) : null}
           </div>
         )}
