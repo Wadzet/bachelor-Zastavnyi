@@ -19,11 +19,6 @@ export const metadata: Metadata = {
     template: `%s — ${BRAND.name}`,
   },
   description: BRAND.tagline,
-  icons: {
-    icon: [
-      { url: "/favicon.svg", type: "image/svg+xml" },
-    ],
-  },
 }
 
 export default function RootLayout({

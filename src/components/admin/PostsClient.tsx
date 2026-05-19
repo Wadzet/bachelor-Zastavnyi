@@ -374,32 +374,7 @@ function EditPanel({
 
 // ─── Post preview panel ───────────────────────────────────────────────────────
 
-const IMAGE_PROVIDERS: { value: "auto" | "replicate" | "gemini" | "svg"; label: string }[] = [
-  { value: "auto",      label: "Auto"      },
-  { value: "replicate", label: "Replicate" },
-  { value: "gemini",    label: "Gemini"    },
-  { value: "svg",       label: "SVG"       },
-]
-
-function PostPreviewPanel({
-  post,
-  onClose,
-  onGenerateImage,
-  isGenerating,
-  generateError,
-  imageProvider,
-  onProviderChange,
-  lastImageProvider,
-}: {
-  post:             Post
-  onClose:          () => void
-  onGenerateImage:  () => void
-  isGenerating:     boolean
-  generateError:    string | null
-  imageProvider:    "auto" | "replicate" | "gemini" | "svg"
-  onProviderChange: (p: "auto" | "replicate" | "gemini" | "svg") => void
-  lastImageProvider: string | null
-}) {
+function PostPreviewPanel({ post, onClose }: { post: Post; onClose: () => void }) {
   const path = publicUrlPath(post)
 
   return (
@@ -436,18 +411,6 @@ function PostPreviewPanel({
         </button>
       </div>
 
-      {/* Cover image preview */}
-      {post.coverImage && (
-        <div className="mb-4 overflow-hidden rounded-lg border border-zinc-800">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={post.coverImage}
-            alt={`Cover image for ${post.title}`}
-            className="h-40 w-full object-cover"
-          />
-        </div>
-      )}
-
       {/* Title + excerpt */}
       <h3 className="text-sm font-bold leading-snug text-white">{post.title}</h3>
       <p className="mt-2 text-xs leading-relaxed text-zinc-400">{post.excerpt}</p>
@@ -479,67 +442,6 @@ function PostPreviewPanel({
       <div className="mt-3 space-y-0.5 text-xs text-zinc-700">
         {post.publishedAt && <p>Published {formatDate(post.publishedAt)}</p>}
         <p>Updated {formatDate(post.updatedAt)}</p>
-      </div>
-
-      {/* Generate cover image */}
-      <div className="mt-4 border-t border-zinc-800/60 pt-4">
-        {/* Provider selector */}
-        <div className="mb-3 flex items-center gap-2">
-          <label htmlFor="img-provider" className="text-[10px] font-medium uppercase tracking-wider text-zinc-600">
-            Provider
-          </label>
-          <select
-            id="img-provider"
-            value={imageProvider}
-            onChange={(e) => onProviderChange(e.target.value as "auto" | "replicate" | "gemini" | "svg")}
-            disabled={isGenerating}
-            className="rounded border border-zinc-700 bg-zinc-800/60 px-2 py-0.5 text-xs text-zinc-300 focus:border-amber-400/50 focus:outline-none disabled:opacity-50"
-          >
-            {IMAGE_PROVIDERS.map((p) => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {generateError && (
-          <p role="alert" className="mb-3 text-xs text-red-400">
-            {generateError}
-          </p>
-        )}
-
-        {lastImageProvider && !generateError && (
-          <p className="mb-3 text-[10px] text-emerald-500">
-            ✓ Generated with {lastImageProvider}
-          </p>
-        )}
-
-        <button
-          type="button"
-          onClick={onGenerateImage}
-          disabled={isGenerating}
-          className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-1.5 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isGenerating ? (
-            <>
-              <svg className="h-3 w-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Generating…
-            </>
-          ) : (
-            <>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              {post.coverImage ? "Regenerate cover" : "Generate cover"}
-            </>
-          )}
-        </button>
-        <p className="mt-2 text-[10px] leading-relaxed text-zinc-700">
-          Cover image saved to Supabase Storage and post record updated automatically.
-          Auto mode uses Replicate (FLUX.1 Schnell) with SVG fallback.
-        </p>
       </div>
     </div>
   )
@@ -600,11 +502,6 @@ function TelegramPreviewPanel({
           {message}
         </p>
       </div>
-
-      {/* Cover image note */}
-      <p className={`mt-2 text-[10px] ${post.coverImage ? "text-emerald-600" : "text-zinc-600"}`}>
-        {post.coverImage ? "📷 Cover image will be included" : "Text-only post (no cover image)"}
-      </p>
 
       {/* Note for unpublished posts */}
       {post.status !== "published" && (
@@ -821,11 +718,6 @@ function LinkedInPreviewPanel({
         </p>
       </div>
 
-      {/* Cover image note */}
-      <p className={`mt-2 text-[10px] ${post.coverImage ? "text-emerald-600" : "text-zinc-600"}`}>
-        {post.coverImage ? "🖼 Cover image will be included" : "Text-only post (no cover image)"}
-      </p>
-
       {/* Inline error */}
       {error && (
         <p role="alert" className="mt-3 text-xs text-red-400">
@@ -979,8 +871,6 @@ export default function PostsClient({ posts }: Props) {
   const [editingPost, setEditingPost]       = useState<Post | null>(null)
   const [actionLoading, setActionLoading]   = useState<ActionLoading>(null)
   const [actionError, setActionError]       = useState<ActionError>(null)
-  const [imageProvider, setImageProvider]   = useState<"auto" | "replicate" | "gemini" | "svg">("auto")
-  const [lastImageProvider, setLastImageProvider] = useState<string | null>(null)
 
   // ── Filtered list ────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -1202,39 +1092,6 @@ export default function PostsClient({ posts }: Props) {
         // window between the API response and the server re-render completing.
         setSelectedPost((prev) =>
           prev?.id === post.id ? { ...prev, linkedinStatus: "sent" as LinkedInStatus } : prev,
-        )
-        router.refresh()
-      }
-    } catch {
-      setActionError({ id: post.id, message: "Network error. Please try again." })
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  async function handleGenerateImage(post: Post) {
-    setActionLoading({ id: post.id, action: "img-generate" })
-    setActionError(null)
-    setLastImageProvider(null)
-    try {
-      const res  = await fetch(`/api/admin/posts/${post.id}/image/generate`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ provider: imageProvider }),
-      })
-      const json = await res.json()
-      if (!json.success) {
-        setActionError({ id: post.id, message: json.message ?? "Failed to generate image." })
-      } else {
-        // Track which provider actually ran (may differ from imageProvider in auto mode)
-        const usedProvider = json.fallback
-          ? `${String(json.provider)} (fallback)`
-          : String(json.provider)
-        setLastImageProvider(usedProvider)
-        // Optimistically update coverImage in selectedPost so the preview shows
-        // immediately — before router.refresh() completes.
-        setSelectedPost((prev) =>
-          prev?.id === post.id ? { ...prev, coverImage: json.imageUrl as string } : prev,
         )
         router.refresh()
       }
@@ -1715,26 +1572,10 @@ export default function PostsClient({ posts }: Props) {
                 )
               })()
             ) : selectedPost ? (
-              (() => {
-                const activePost = posts.find((p) => p.id === selectedPost.id) ?? selectedPost
-                return (
-                  <PostPreviewPanel
-                    post={activePost}
-                    onClose={() => setSelectedPost(null)}
-                    onGenerateImage={() => handleGenerateImage(activePost)}
-                    isGenerating={
-                      actionLoading?.id === activePost.id &&
-                      actionLoading.action === "img-generate"
-                    }
-                    generateError={
-                      actionError?.id === activePost.id ? actionError.message : null
-                    }
-                    imageProvider={imageProvider}
-                    onProviderChange={setImageProvider}
-                    lastImageProvider={lastImageProvider}
-                  />
-                )
-              })()
+              <PostPreviewPanel
+                post={posts.find((p) => p.id === selectedPost.id) ?? selectedPost}
+                onClose={() => setSelectedPost(null)}
+              />
             ) : null}
           </div>
         )}

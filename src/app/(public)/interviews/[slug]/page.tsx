@@ -30,27 +30,9 @@ export async function generateMetadata({
   const { slug } = await params
   const interview = await getInterviewBySlug(slug)
   if (!interview) return { title: `Not Found — ${BRAND.name}` }
-
-  const ogImage = interview.coverImage
-    ? [{ url: interview.coverImage, width: 1600, height: 900, alt: interview.title }]
-    : []
-
   return {
-    title:       `${interview.title} — ${BRAND.name}`,
+    title: `${interview.title} — ${BRAND.name}`,
     description: interview.excerpt,
-    openGraph: {
-      title:       `${interview.title} — ${BRAND.name}`,
-      description: interview.excerpt,
-      type:        "article",
-      url:         `${BRAND.siteUrl}/interviews/${slug}`,
-      ...(ogImage.length > 0 ? { images: ogImage } : {}),
-    },
-    twitter: {
-      card:        interview.coverImage ? "summary_large_image" : "summary",
-      title:       `${interview.title} — ${BRAND.name}`,
-      description: interview.excerpt,
-      ...(interview.coverImage ? { images: [interview.coverImage] } : {}),
-    },
   }
 }
 
@@ -87,19 +69,6 @@ export default async function InterviewDetailPage({
           title={interview.title}
           publishedAt={interview.publishedAt}
         />
-
-        {/* Cover image */}
-        {interview.coverImage && (
-          <div className="mb-10 overflow-hidden rounded-2xl border border-zinc-800">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={interview.coverImage}
-              alt={`Cover image for ${interview.title}`}
-              className="w-full object-cover"
-              style={{ aspectRatio: "16/9" }}
-            />
-          </div>
-        )}
 
         {/* Guest block */}
         <div className="mb-10 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">

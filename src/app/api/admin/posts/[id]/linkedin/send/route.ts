@@ -1,26 +1,17 @@
 import { NextResponse } from "next/server"
 import { getServerClient } from "@/lib/supabase/server"
-import {
-  createLinkedInPost,
-  createLinkedInPostWithImage,
-  uploadLinkedInImage,
-} from "@/lib/linkedin/client"
+import { createLinkedInPost } from "@/lib/linkedin/client"
 import { BRAND } from "@/config/brand"
 import { requireAdminApiAuth } from "@/lib/auth/admin"
 
 // POST /api/admin/posts/[id]/linkedin/send
 // Sends a published post to the connected LinkedIn member profile via the API.
+// Requires a valid non-expired token in social_accounts.
 //
-// Delivery strategy:
-//   cover_image_url present AND not SVG → try image upload + image post
-//     image upload/post fails           → fall back to text-only post
-//   cover_image_url present AND is SVG  → text-only post (SVG not supported
-//                                         by LinkedIn Images API: JPG/GIF/PNG only)
-//   cover_image_url absent              → text-only post
-//
-// metadata stored: { linkedin_post_id, linkedin_image_urn?, delivery_type: "image"|"text", manual: false }
+// On success: upserts distribution_jobs with status=sent
+// On failure: upserts distribution_jobs with status=failed (safe error only)
 
-// ─── Message builder ──────────────────────────────────────────────────────────
+// ─── Message builder (server-side — never trust client text) ─────────────────
 
 function publicUrlPath(contentType: string, slug: string): string {
   return contentType === "interview" ? `/interviews/${slug}` : `/insights/${slug}`
@@ -42,18 +33,6 @@ function buildLinkedInText(
   )
 }
 
-/**
- * Returns true if the URL points to an SVG file.
- * LinkedIn Images API supports JPG / GIF / PNG only — not SVG.
- */
-function isSvgUrl(url: string): boolean {
-  try {
-    return new URL(url).pathname.toLowerCase().endsWith(".svg")
-  } catch {
-    return url.toLowerCase().includes(".svg")
-  }
-}
-
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(
@@ -66,10 +45,10 @@ export async function POST(
   const { id } = await params
   const supabase = getServerClient()
 
-  // ── Fetch post (include cover_image_url) ──────────────────────────────────
+  // ── Fetch post ────────────────────────────────────────────────────────────
   const { data: post, error: fetchError } = await supabase
     .from("posts")
-    .select("id, title, excerpt, content_type, slug, status, cover_image_url")
+    .select("id, title, excerpt, content_type, slug, status")
     .eq("id", id)
     .maybeSingle()
 
@@ -88,14 +67,9 @@ export async function POST(
     )
   }
 
-  const { title, excerpt, content_type, slug, status, cover_image_url } = post as {
-    id:              string
-    title:           string
-    excerpt:         string
-    content_type:    string
-    slug:            string
-    status:          string
-    cover_image_url: string | null
+  const { title, excerpt, content_type, slug, status } = post as {
+    id: string; title: string; excerpt: string
+    content_type: string; slug: string; status: string
   }
 
   if (status !== "published") {
@@ -105,25 +79,9 @@ export async function POST(
     )
   }
 
-  // ── Idempotency guard ─────────────────────────────────────────────────────
-  const { data: existingJob, error: existingJobError } = await supabase
-    .from("distribution_jobs")
-    .select("status")
-    .eq("post_id", id)
-    .eq("channel", "linkedin")
-    .eq("status", "sent")
-    .maybeSingle()
-
-  if (existingJobError) {
-    console.error("[admin/posts/linkedin/send] idempotency check error:", existingJobError.message)
-  }
-
-  if (existingJob) {
-    console.log(`[admin/posts/linkedin/send] post ${id} already sent to LinkedIn — skipping`)
-    return NextResponse.json({ success: true, alreadySent: true }, { status: 200 })
-  }
-
   // ── Load LinkedIn token from social_accounts ──────────────────────────────
+  // Selects most-recently-updated member account.
+  // access_token stays server-side — never returned to the browser.
   const { data: account, error: accountError } = await supabase
     .from("social_accounts")
     .select("access_token, provider_account_id, display_name, expires_at")
@@ -155,79 +113,16 @@ export async function POST(
     )
   }
 
+  // ── Build post text server-side ───────────────────────────────────────────
   const memberUrn = `urn:li:person:${account.provider_account_id}`
   const text      = buildLinkedInText(title, excerpt, content_type, slug)
 
-  // ── Choose delivery method ────────────────────────────────────────────────
-  let result: Awaited<ReturnType<typeof createLinkedInPost>>
-  let deliveryType: "image" | "text" = "text"
-  let linkedinImageUrn: string | undefined
+  // ── Call LinkedIn Posts API ───────────────────────────────────────────────
+  const result = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
 
-  if (cover_image_url) {
-    const isSvg = isSvgUrl(cover_image_url)
-    console.log(
-      `[admin/posts/linkedin/send] cover image detected — post=${id} isSvg=${isSvg}`
-    )
-
-    if (isSvg) {
-      // LinkedIn Images API supports JPG/GIF/PNG only — not SVG
-      console.log(
-        "[admin/posts/linkedin/send] cover image is SVG — delivery fallback reason: " +
-        "SVG not supported by LinkedIn Images API (JPG/GIF/PNG only)"
-      )
-      result       = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
-      deliveryType = "text"
-    } else {
-      // PNG / JPEG / WebP — attempt image upload then image post
-      console.log(`[admin/posts/linkedin/send] uploading cover image — post=${id}`)
-      const uploadResult = await uploadLinkedInImage({
-        accessToken: account.access_token,
-        memberUrn,
-        imageUrl:    cover_image_url,
-      })
-
-      if (uploadResult.ok && uploadResult.imageUrn) {
-        console.log(`[admin/posts/linkedin/send] creating image post — post=${id}`)
-        const imagePostResult = await createLinkedInPostWithImage({
-          accessToken: account.access_token,
-          memberUrn,
-          text,
-          imageUrn: uploadResult.imageUrn,
-        })
-
-        if (imagePostResult.ok) {
-          result           = imagePostResult
-          deliveryType     = "image"
-          linkedinImageUrn = uploadResult.imageUrn
-        } else {
-          // Image post failed — fall back to text
-          console.warn(
-            `[admin/posts/linkedin/send] image post failed — delivery fallback reason: ` +
-            `${imagePostResult.error ?? "unknown error"}`
-          )
-          result       = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
-          deliveryType = "text"
-        }
-      } else {
-        // Image upload failed — fall back to text
-        console.warn(
-          `[admin/posts/linkedin/send] image upload failed — delivery fallback reason: ` +
-          `${uploadResult.error ?? "unknown error"}`
-        )
-        result       = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
-        deliveryType = "text"
-      }
-    }
-  } else {
-    // No cover image — text-only directly
-    console.log(`[admin/posts/linkedin/send] no cover image — creating text post — post=${id}`)
-    result       = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
-    deliveryType = "text"
-  }
-
-  // ── Handle final API failure ──────────────────────────────────────────────
   if (!result.ok) {
     const safeError = result.error ?? "LinkedIn API returned an error."
+    // Debug-safe: no token in log
     console.error("[admin/posts/linkedin/send] API error:", safeError)
 
     await supabase.from("distribution_jobs").upsert(
@@ -248,39 +143,21 @@ export async function POST(
 
   // ── Success — record sent status ──────────────────────────────────────────
   const metadata = JSON.stringify({
-    linkedin_post_id:   result.postId ?? null,
-    linkedin_image_urn: linkedinImageUrn ?? null,
-    delivery_type:      deliveryType,
-    manual:             false,
+    linkedin_post_id: result.postId ?? null,
+    manual:           false,
   })
 
-  const { error: successUpsertError } = await supabase
-    .from("distribution_jobs")
-    .upsert(
-      {
-        post_id:       id,
-        channel:       "linkedin",
-        status:        "sent",
-        sent_at:       new Date().toISOString(),
-        error_message: null,
-        metadata,
-      },
-      { onConflict: "post_id,channel" },
-    )
+  await supabase.from("distribution_jobs").upsert(
+    {
+      post_id:       id,
+      channel:       "linkedin",
+      status:        "sent",
+      sent_at:       new Date().toISOString(),
+      error_message: null,
+      metadata,
+    },
+    { onConflict: "post_id,channel" },
+  )
 
-  if (successUpsertError) {
-    console.error("[admin/posts/linkedin/send] sent-status upsert error:", successUpsertError.message)
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          "LinkedIn post was created, but the app failed to record the sent status. " +
-          "Check server logs for details.",
-      },
-      { status: 500 },
-    )
-  }
-
-  console.log(`[admin/posts/linkedin/send] sent — post=${id} delivery=${deliveryType}`)
   return NextResponse.json({ success: true }, { status: 200 })
 }

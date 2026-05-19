@@ -91,16 +91,15 @@ export async function getMemberInfo(accessToken: string): Promise<LinkedInUserIn
   return res.json() as Promise<LinkedInUserInfo>
 }
 
-// ─── Create LinkedIn post (text-only) ────────────────────────────────────────
+// ─── Create LinkedIn post ─────────────────────────────────────────────────────
 // Uses the LinkedIn Posts API (REST) with required versioning headers.
 // Posts to the member's personal feed with PUBLIC visibility.
 // Returns the post URN from the x-restli-id response header on success.
 
 export type LinkedInPostResult = {
-  ok:        boolean
-  postId?:   string   // LinkedIn post URN, e.g. "urn:li:share:1234567890"
-  imageUrn?: string   // LinkedIn image URN if image was attached
-  error?:    string   // Safe error string — never includes access token
+  ok:      boolean
+  postId?: string   // LinkedIn post URN, e.g. "urn:li:share:1234567890"
+  error?:  string   // Safe error string — never includes access token
 }
 
 export async function createLinkedInPost({
@@ -132,9 +131,9 @@ export async function createLinkedInPost({
     res = await fetch("https://api.linkedin.com/rest/posts", {
       method:  "POST",
       headers: {
-        Authorization:               `Bearer ${accessToken}`,
-        "Content-Type":              "application/json",
-        "LinkedIn-Version":          apiVersion,
+        Authorization:              `Bearer ${accessToken}`,
+        "Content-Type":             "application/json",
+        "LinkedIn-Version":         apiVersion,
         "X-Restli-Protocol-Version": "2.0.0",
       },
       body: JSON.stringify(payload),
@@ -145,161 +144,13 @@ export async function createLinkedInPost({
   }
 
   if (!res.ok) {
-    const body = await res.text()
-    return { ok: false, error: `LinkedIn API error (${res.status}): ${body.slice(0, 200)}` }
+    const text = await res.text()
+    // Safe error — never includes access token or client secret
+    return { ok: false, error: `LinkedIn API error (${res.status}): ${text.slice(0, 200)}` }
   }
 
+  // 201 Created — LinkedIn returns the post URN in x-restli-id header
   const postId = res.headers.get("x-restli-id") ?? undefined
+
   return { ok: true, postId }
-}
-
-// ─── LinkedIn image upload ────────────────────────────────────────────────────
-// Two-step process required by LinkedIn Images API:
-//   1. POST /rest/images?action=initializeUpload  → get uploadUrl + image URN
-//   2. PUT {uploadUrl} with raw image bytes
-//
-// The resulting image URN is then used in createLinkedInPostWithImage.
-// All fetches are server-side only. Access token is never logged or returned.
-
-export type LinkedInImageUploadResult = {
-  ok:       boolean
-  imageUrn?: string   // e.g. "urn:li:image:C5522AQE..."
-  error?:    string
-}
-
-export async function uploadLinkedInImage({
-  accessToken,
-  memberUrn,
-  imageUrl,
-}: {
-  accessToken: string
-  memberUrn:   string   // owner URN: "urn:li:person:{sub}"
-  imageUrl:    string   // public HTTPS URL of the cover image
-}): Promise<LinkedInImageUploadResult> {
-  const { apiVersion } = getConfig()
-
-  const authHeaders = {
-    Authorization:               `Bearer ${accessToken}`,
-    "LinkedIn-Version":          apiVersion,
-    "X-Restli-Protocol-Version": "2.0.0",
-  }
-
-  // ── Step 1: Register upload and obtain uploadUrl + image URN ─────────────
-  let initRes: Response
-  try {
-    initRes = await fetch("https://api.linkedin.com/rest/images?action=initializeUpload", {
-      method:  "POST",
-      headers: { ...authHeaders, "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        initializeUploadRequest: { owner: memberUrn },
-      }),
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error"
-    return { ok: false, error: `Network error initializing LinkedIn image upload: ${msg.slice(0, 200)}` }
-  }
-
-  if (!initRes.ok) {
-    const body = await initRes.text()
-    return { ok: false, error: `LinkedIn image init error (${initRes.status}): ${body.slice(0, 200)}` }
-  }
-
-  type InitBody = { value?: { uploadUrl?: string; image?: string } }
-  const initBody = await initRes.json() as InitBody
-  const uploadUrl = initBody.value?.uploadUrl
-  const imageUrn  = initBody.value?.image
-
-  if (!uploadUrl || !imageUrn) {
-    return { ok: false, error: "LinkedIn image init returned no uploadUrl or image URN." }
-  }
-
-  // ── Step 2: Fetch image bytes server-side then PUT to uploadUrl ──────────
-  let imageBytes: ArrayBuffer
-  try {
-    const imgRes = await fetch(imageUrl)
-    if (!imgRes.ok) {
-      return { ok: false, error: `Failed to fetch cover image bytes (HTTP ${imgRes.status}).` }
-    }
-    imageBytes = await imgRes.arrayBuffer()
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error"
-    return { ok: false, error: `Network error fetching cover image: ${msg.slice(0, 200)}` }
-  }
-
-  let putRes: Response
-  try {
-    putRes = await fetch(uploadUrl, {
-      method:  "PUT",
-      headers: { "Content-Type": "application/octet-stream" },
-      body:    imageBytes,
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error"
-    return { ok: false, error: `Network error uploading image to LinkedIn: ${msg.slice(0, 200)}` }
-  }
-
-  if (!putRes.ok) {
-    return { ok: false, error: `LinkedIn image PUT failed (${putRes.status}).` }
-  }
-
-  return { ok: true, imageUrn }
-}
-
-// ─── Create LinkedIn post with image ─────────────────────────────────────────
-// Like createLinkedInPost but adds content.media using an already-uploaded
-// LinkedIn image URN. Call uploadLinkedInImage first to obtain the URN.
-
-export async function createLinkedInPostWithImage({
-  accessToken,
-  memberUrn,
-  text,
-  imageUrn,
-}: {
-  accessToken: string
-  memberUrn:   string
-  text:        string
-  imageUrn:    string   // "urn:li:image:..."
-}): Promise<LinkedInPostResult> {
-  const { apiVersion } = getConfig()
-
-  const payload = {
-    author:      memberUrn,
-    commentary:  text,
-    visibility:  "PUBLIC",
-    distribution: {
-      feedDistribution:               "MAIN_FEED",
-      targetEntities:                 [],
-      thirdPartyDistributionChannels: [],
-    },
-    content: {
-      media: { id: imageUrn },
-    },
-    lifecycleState:            "PUBLISHED",
-    isReshareDisabledByAuthor: false,
-  }
-
-  let res: Response
-  try {
-    res = await fetch("https://api.linkedin.com/rest/posts", {
-      method:  "POST",
-      headers: {
-        Authorization:               `Bearer ${accessToken}`,
-        "Content-Type":              "application/json",
-        "LinkedIn-Version":          apiVersion,
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
-      body: JSON.stringify(payload),
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown network error"
-    return { ok: false, error: `Network error posting to LinkedIn: ${msg.slice(0, 200)}` }
-  }
-
-  if (!res.ok) {
-    const body = await res.text()
-    return { ok: false, error: `LinkedIn API error (${res.status}): ${body.slice(0, 200)}` }
-  }
-
-  const postId = res.headers.get("x-restli-id") ?? undefined
-  return { ok: true, postId, imageUrn }
 }
