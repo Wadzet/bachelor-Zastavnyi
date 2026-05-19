@@ -1,208 +1,306 @@
 # BizInsight Platform
 
-> **Тема бакалаврської кваліфікаційної роботи:**
-> Розроблення інтелектуальної веб-платформи для автоматизованого створення медіаконтенту про впровадження рішень штучного інтелекту в бізнесі
+**Тема кваліфікаційної роботи бакалавра:**  
+**«Розроблення інтелектуальної веб-платформи для автоматизованого створення медіаконтенту про впровадження рішень штучного інтелекту в бізнесі»**
+
+**Автор:** Заставний Василь-Вадим Валерійович 
+
+**Науковий керівник:** Костюченко Юрій Юрійович, CBDO UBOS
 
 ---
 
-## Автор
+## Про проєкт
 
-| Поле | Значення |
+**BizInsight Platform** — це інтелектуальна веб-платформа для створення, редакційної перевірки та поширення медіаконтенту про впровадження AI-рішень у бізнесі.
+
+Платформа допомагає скоротити ручну роботу під час підготовки матеріалів: система може працювати з перевіреними джерелами або введеним текстом, створювати AI-чернетки, генерувати зображення для матеріалів, зберігати результат у CMS і поширювати готові публікації на вебсайті, а також у Telegram та LinkedIn.
+
+Проєкт має два основні сценарії роботи:
+
+- **автоматизований режим** — система працює з визначеними джерелами та параметрами й готує матеріал до публікації;
+- **редакторський режим** — редактор сам обирає джерело, тип контенту, тему, AI-модель, перевіряє чернетку та приймає фінальне рішення щодо публікації.
+
+---
+
+
+
+## Стек технологій
+
+| Частина системи | Технології |
 |---|---|
-| ПІБ | Заставний Василь-Вадим Валерійович |
-| Група | 4CS-41 |
-| Спеціальність | 122 Комп'ютерні науки |
-
-## Науковий керівник
-
-| Поле | Значення |
-|---|---|
-| ПІБ | Костюченко Юрій Юрійович |
-| Посада | CBDO у UBOS |
+| Frontend | Next.js, React, TypeScript, Tailwind CSS |
+| Backend / BaaS | Supabase PostgreSQL, Supabase Auth, Supabase Storage, RLS |
+| AI text generation | Gemini API, OpenAI API |
+| AI image generation | Replicate FLUX.1 Schnell, Gemini 2.5 Flash Image, SVG fallback |
+| Integrations | Telegram Bot API, LinkedIn API, OAuth |
+| Hosting | Vercel |
 
 ---
 
-## Опис проєкту
 
-**BizInsight Platform** — це інтелектуальна веб-платформа, що автоматизує повний цикл створення, редакційного огляду та багатоканального поширення медіаконтенту про впровадження рішень штучного інтелекту в бізнесі.
+## Запуск проекту:
 
-**Яку проблему вирішує:**
-Редакції та контент-команди витрачають багато часу на ручне написання матеріалів, пошук тем і дистрибуцію публікацій. BizInsight автоматизує ці процеси: система аналізує першоджерела, генерує чернетки за допомогою AI, дозволяє редактору їх перевірити й одним кліком опублікувати на сайті та поширити в Telegram і LinkedIn.
-
-**Для кого:**
-Контент-команди, медіа-видання, PR-відділи та бізнеси, які публікують матеріали про AI-трансформацію.
-
-**AI-функції:**
-- Генерація чернеток статей та інтерв'ю на основі URL-посилання або текстового введення (Google Gemini / OpenAI)
-- Генерація обкладинок для публікацій (Replicate FLUX.1 Schnell, Gemini Image Generation, SVG-fallback)
-- Інтелектуальний вибір формату та візуального стилю обкладинки залежно від типу контенту
-
-**Канали дистрибуції:**
-- Публікація на публічному сайті (Next.js SSR/SSG)
-- Поширення в Telegram-канал через Telegram Bot API (фото + підпис або текст)
-- Публікація в LinkedIn через LinkedIn OAuth 2.0 та LinkedIn API (з прикріпленим зображенням або текстом)
-
----
-
-## Основні можливості
-
-- **Публічний сайт** — стрічка та детальні сторінки матеріалів (Insights, Interviews) з OG-метаданими та зображеннями обкладинок
-- **Захищений адмін-розділ (CMS)** — доступний лише авторизованим адміністраторам через Supabase Auth
-- **Управління першоджерелами** — додавання, редагування та видалення URL-джерел для генерації контенту
-- **AI-генерація чернеток** — автоматичне створення структурованих чернеток з URL або сирого тексту
-- **Редакційний workflow** — перегляд, редагування та затвердження чернеток перед публікацією
-- **Ручний та автоматичний режими** — редактор може вносити зміни або повністю покластися на AI
-- **AI-генерація обкладинок** — вибір провайдера (Replicate / Gemini / SVG) та автоматичне збереження в Supabase Storage
-- **Supabase PostgreSQL** — надійна реляційна БД з RLS-захистом
-- **Telegram Bot API** — публікація матеріалу з фото-обкладинкою або як текстового повідомлення
-- **LinkedIn OAuth 2.0 + LinkedIn API** — публікація з прикріпленим зображенням або текст-only пост
-- **Статуси дистрибуції** — відстеження стану відправки в Telegram та LinkedIn для кожної публікації
-- **Деплой на Vercel** — автоматичний CI/CD із GitHub
-
----
-
-## Технічний стек
-
-| Категорія | Технології |
-|---|---|
-| **Frontend** | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4 |
-| **Backend / BaaS** | Supabase PostgreSQL, Supabase Auth, Supabase Storage, RLS |
-| **AI** | Google Gemini API (`@google/genai`), OpenAI API, Replicate FLUX.1 Schnell |
-| **Інтеграції** | Telegram Bot API, LinkedIn REST API, LinkedIn OAuth 2.0 |
-| **Деплой** | Vercel |
-| **Контроль версій** | Git, GitHub |
-
----
-
-## Структура проєкту
-
-```
-src/
-├── app/
-│   ├── (public)/          # Публічний сайт: головна, insights, interviews, контакти
-│   ├── admin/             # Захищений адмін-розділ: дашборд, джерела, чернетки, публікації
-│   └── api/               # API Route Handlers: AI-генерація, Telegram, LinkedIn, auth
-├── components/
-│   ├── admin/             # Компоненти CMS (форми, таблиці, панелі попереднього перегляду)
-│   ├── brand/             # Логотип та брендові компоненти
-│   ├── content/           # Компоненти відображення статей та інтерв'ю
-│   ├── home/              # Компоненти головної сторінки
-│   ├── layout/            # Хедер, футер, навігація
-│   └── ui/                # Загальні UI-примітиви
-├── lib/
-│   ├── supabase/          # Supabase-клієнти (server-only та browser)
-│   ├── data/              # Функції доступу до даних (server-only)
-│   ├── gemini/            # Gemini AI: генерація тексту та зображень
-│   ├── image/             # Абстракція провайдерів генерації зображень
-│   ├── telegram/          # Telegram Bot API клієнт
-│   ├── linkedin/          # LinkedIn OAuth та LinkedIn API клієнт
-│   └── auth/              # Логіка авторизації та middleware
-supabase/
-└── migrations/            # SQL-міграції схеми бази даних (001–004)
-public/                    # Статичні ресурси: логотип, favicon
-```
-
----
-
-## Налаштування та локальний запуск
-
-### Передумови
-
-- Node.js 20 або новіший
-- npm 10 або новіший
-- Обліковий запис [Supabase](https://supabase.com) з новим проєктом
-
-### 1. Клонування репозиторію
+### 1. Клонувати репозиторій
 
 ```bash
 git clone <repository-url>
-cd ai-business-media-platform
+cd <bachelor-Zastavnyi>
 ```
 
-### 2. Встановлення залежностей
+### 2. Встановити залежності
 
 ```bash
 npm install
 ```
 
-### 3. Налаштування змінних середовища
+### 3. Створити локальний файл змінних середовища
 
 ```bash
 cp .env.example .env.local
 ```
 
-Відкрийте `.env.local` і заповніть значення (детальні інструкції для кожної змінної наведено у `.env.example`):
+Після цього потрібно відкрити `.env.local` і заповнити значення змінних.
 
-| Змінна | Опис | Обов'язкова |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | URL Supabase-проєкту | ✅ |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon (публічний) ключ Supabase | ✅ |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role ключ (тільки сервер!) | ✅ |
-| `GEMINI_API_KEY` | API-ключ Google Gemini | ✅ |
-| `ADMIN_EMAILS` | Email-адреси адміністраторів (через кому) | ✅ |
-| `NEXT_PUBLIC_SITE_URL` | Публічний URL сайту | ✅ |
-| `TELEGRAM_BOT_TOKEN` | Токен Telegram-бота від @BotFather | Telegram |
-| `TELEGRAM_CHAT_ID` | ID Telegram-каналу або групи | Telegram |
-| `LINKEDIN_CLIENT_ID` | Client ID LinkedIn Developer App | LinkedIn |
-| `LINKEDIN_CLIENT_SECRET` | Client Secret LinkedIn Developer App | LinkedIn |
-| `LINKEDIN_REDIRECT_URI` | Callback URL для LinkedIn OAuth | LinkedIn |
-| `LINKEDIN_API_VERSION` | Версія LinkedIn API (формат YYYYMM) | LinkedIn |
-| `REPLICATE_API_TOKEN` | API-токен Replicate (для FLUX.1 Schnell) | Зображення |
-| `DEFAULT_IMAGE_PROVIDER` | Провайдер зображень: `auto`/`replicate`/`gemini`/`svg` | — |
-
-> **Безпека:** `.env.local` є git-ignored і **ніколи не повинен потрапляти в репозиторій**. Ключі `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`, `REPLICATE_API_TOKEN`, `TELEGRAM_BOT_TOKEN`, `LINKEDIN_CLIENT_SECRET` використовуються виключно на сервері.
-
-### 4. Налаштування бази даних
-
-Міграції застосовуються через [Supabase Dashboard](https://supabase.com/dashboard) → **SQL Editor**. Виконайте файли по черзі у порядку нумерації:
-
-```
-supabase/migrations/001_initial_schema.sql   — схема таблиць та enum-типів
-supabase/migrations/002_enable_rls.sql        — увімкнення Row Level Security
-supabase/migrations/003_linkedin_oauth.sql    — таблиця для LinkedIn OAuth-токенів
-supabase/migrations/004_post_images_bucket.sql — (тільки документація, без SQL)
-```
-
-> **Supabase Storage (обкладинки):** Bucket `post-images` потрібно створити вручну через Dashboard → **Storage → New bucket**:
-> - Name: `post-images`
-> - Public: **увімкнено**
-> - Allowed MIME types: `image/png, image/jpeg, image/webp`
-> - Max file size: `5 MB`
-
-### 5. Налаштування адміністраторів
-
-У [Supabase Dashboard](https://supabase.com/dashboard) → **Authentication → Users** створіть обліковий запис для адміністратора. Email цього запису має бути вказано у змінній `ADMIN_EMAILS` у `.env.local`.
-
-### 6. Запуск у режимі розробки
+### 4. Запустити проєкт локально
 
 ```bash
 npm run dev
 ```
 
-Сайт доступний за адресою: [http://localhost:3000](http://localhost:3000)
-Адмін-панель: [http://localhost:3000/admin](http://localhost:3000/admin)
+Після запуску сайт буде доступний за адресою:
 
-### Доступні скрипти
+```txt
+http://localhost:3000
+```
 
-| Скрипт | Команда | Опис |
-|---|---|---|
-| Розробка | `npm run dev` | Запуск dev-сервера на `0.0.0.0:3000` |
-| Збірка | `npm run build` | Production-збірка Next.js |
-| Запуск | `npm run start` | Запуск production-збірки |
-| Лінтер | `npm run lint` | Перевірка коду ESLint |
+Адміністративна частина:
+
+```txt
+http://localhost:3000/admin
+```
 
 ---
 
+## Змінні середовища
+
+Усі потрібні змінні мають бути описані у файлі `.env.example`. Для локального запуску потрібно створити `.env.local` і заповнити значення.
+
+Приклад основних змінних:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+ADMIN_EMAILS=
+NEXT_PUBLIC_SITE_URL=
+
+GEMINI_API_KEY=
+OPENAI_API_KEY=
+REPLICATE_API_TOKEN=
+
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+
+LINKEDIN_CLIENT_ID=
+LINKEDIN_CLIENT_SECRET=
+LINKEDIN_REDIRECT_URI=
+LINKEDIN_API_VERSION=
+
+DEFAULT_IMAGE_PROVIDER=
+```
+
+
+---
+
+## Налаштування Supabase
+
+1. Створити новий проєкт у [Supabase](https://supabase.com).
+2. Скопіювати `Project URL` і `anon public key` у `.env.local`.
+3. Скопіювати `service_role key` у `.env.local`.
+4. Відкрити **Supabase Dashboard → SQL Editor**.
+5. Послідовно виконати SQL-міграції з папки:
+
+```txt
+supabase/migrations
+```
+
+Міграції потрібно виконувати за порядком нумерації.
+
+### Supabase Storage
+
+Для зображень матеріалів використовується bucket:
+
+```txt
+post-images
+```
+
+Його потрібно створити вручну:
+
+1. Відкрити **Supabase Dashboard → Storage**.
+2. Натиснути **New bucket**.
+3. Назва bucket: `post-images`.
+4. Увімкнути public access, якщо зображення мають відкриватися на публічному сайті.
+5. Дозволені MIME types:
+
+```txt
+image/png, image/jpeg, image/webp
+```
+
+---
+
+## Налаштування адміністратора
+
+Admin CMS доступна тільки для дозволених користувачів.
+
+1. Створити користувача в **Supabase Authentication**.
+2. Додати email цього користувача у змінну:
+
+```env
+ADMIN_EMAILS=
+```
+
+Якщо адміністраторів кілька, email-адреси можна розділити комами.
+
+---
+
+## Налаштування AI-провайдерів
+
+### Gemini / OpenAI
+
+Gemini API та OpenAI API використовуються для генерації текстових чернеток. Для роботи потрібно додати відповідні API-ключі в `.env.local`.
+
+```env
+GEMINI_API_KEY=
+OPENAI_API_KEY=
+```
+
+### Replicate
+
+Replicate використовується для генерації зображень, зокрема через модель FLUX.1 Schnell.
+
+```env
+REPLICATE_API_TOKEN=
+```
+
+Якщо зовнішній провайдер недоступний або токен не налаштовано, система може використовувати SVG fallback.
+
+---
+
+## Налаштування Telegram
+
+1. Створити Telegram-бота через [@BotFather](https://t.me/BotFather).
+2. Отримати bot token.
+3. Додати бота в потрібний канал або групу.
+4. Отримати `chat_id` каналу або групи.
+5. Додати значення в `.env.local`:
+
+```env
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+```
+
+Після цього матеріали можна надсилати в Telegram через admin/CMS.
+
+---
+
+## Налаштування LinkedIn
+
+1. Створити LinkedIn Developer App.
+2. Налаштувати OAuth redirect URL.
+3. Додати Client ID і Client Secret у `.env.local`:
+
+```env
+LINKEDIN_CLIENT_ID=
+LINKEDIN_CLIENT_SECRET=
+LINKEDIN_REDIRECT_URI=
+LINKEDIN_API_VERSION=
+```
+
+4. Запустити проєкт.
+5. Перейти в admin/CMS.
+6. Натиснути **Connect LinkedIn**.
+7. Після успішного OAuth-підключення можна публікувати матеріали в LinkedIn.
+
+Для production-деплою redirect URL має відповідати домену Vercel, наприклад:
+
+```txt
+https://your-project.vercel.app/api/admin/linkedin/callback
+```
+
+---
+
+## Доступні npm-скрипти
+
+```bash
+npm run dev
+```
+
+Запуск dev-сервера.
+
+```bash
+npm run build
+```
+
+Production-збірка.
+
+```bash
+npm run start
+```
+
+Запуск production-збірки.
+
+```bash
+npm run lint
+```
+
+Перевірка коду лінтером.
+
+
 ## Деплой на Vercel
 
-1. Зробіть fork або push репозиторію на GitHub.
-2. Підключіть репозиторій у [Vercel Dashboard](https://vercel.com/new).
-3. У **Settings → Environment Variables** додайте всі змінні з `.env.example` (з реальними значеннями).
-4. Оновіть `NEXT_PUBLIC_SITE_URL` та `LINKEDIN_REDIRECT_URI` на продакшн-домен Vercel.
-5. Vercel автоматично збирає та деплоїть проєкт при кожному push у `main`.
+1. Запушити репозиторій у GitHub.
+2. Відкрити [Vercel](https://vercel.com).
+3. Натиснути **Add New Project**.
+4. Обрати GitHub-репозиторій.
+5. Додати всі environment variables з `.env.example`.
+6. Запустити deployment.
+7. Після деплою оновити:
+
+```env
+NEXT_PUBLIC_SITE_URL=
+LINKEDIN_REDIRECT_URI=
+```
+
+8. Перевірити публічний сайт і admin/CMS.
+
+---
+
+## Перевірка роботи
+
+Для перевірки роботи платформи можна пройти такий сценарій:
+
+1. Відкрити публічний сайт.
+2. Перейти в admin/CMS.
+3. Авторизуватися як адміністратор.
+4. Перевірити або додати trusted source.
+5. Створити AI-чернетку з URL або raw text.
+6. Переглянути й відредагувати чернетку.
+7. Створити публікацію.
+8. Згенерувати зображення для матеріалу.
+9. Опублікувати матеріал на сайті.
+10. Надіслати матеріал у Telegram.
+11. Опублікувати матеріал у LinkedIn.
+12. Перевірити статуси дистрибуції в admin/CMS.
+
+---
+
+## Статус проєкту
+
+Проєкт розроблено як робочий MVP у межах бакалаврської кваліфікаційної роботи. Поточна версія демонструє повний цикл роботи з контентом: від джерела або raw text до AI-чернетки, редакційної перевірки, публікації на сайті та поширення в Telegram і LinkedIn.
 
 ---
 
 ## Ліцензія
 
-Проєкт розроблено виключно в навчальних цілях у рамках бакалаврської кваліфікаційної роботи.
+Проєкт створено в навчальних цілях у межах кваліфікаційної роботи бакалавра за спеціальністю 122 «Комп’ютерні науки».
