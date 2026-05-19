@@ -79,6 +79,32 @@ export async function POST(
     )
   }
 
+  // ── Idempotency guard ─────────────────────────────────────────────────────
+  // If a distribution_jobs row already exists with status=sent for this
+  // post + linkedin channel, return success immediately without calling the
+  // LinkedIn API again. This prevents duplicate LinkedIn posts and the
+  // "Failed to post to LinkedIn" error caused by a second UI click on a
+  // stale "Post to LinkedIn" button after the first send succeeded.
+  const { data: existingJob, error: existingJobError } = await supabase
+    .from("distribution_jobs")
+    .select("status")
+    .eq("post_id", id)
+    .eq("channel", "linkedin")
+    .eq("status", "sent")
+    .maybeSingle()
+
+  if (existingJobError) {
+    // Non-fatal: if the check fails, proceed and let the LinkedIn API call
+    // handle the duplicate gracefully (worst case: a second post is created).
+    console.error("[admin/posts/linkedin/send] idempotency check error:", existingJobError.message)
+  }
+
+  if (existingJob) {
+    // Already sent — skip LinkedIn API call entirely.
+    console.log(`[admin/posts/linkedin/send] post ${id} already sent to LinkedIn — skipping`)
+    return NextResponse.json({ success: true, alreadySent: true }, { status: 200 })
+  }
+
   // ── Load LinkedIn token from social_accounts ──────────────────────────────
   // Selects most-recently-updated member account.
   // access_token stays server-side — never returned to the browser.
@@ -147,17 +173,33 @@ export async function POST(
     manual:           false,
   })
 
-  await supabase.from("distribution_jobs").upsert(
-    {
-      post_id:       id,
-      channel:       "linkedin",
-      status:        "sent",
-      sent_at:       new Date().toISOString(),
-      error_message: null,
-      metadata,
-    },
-    { onConflict: "post_id,channel" },
-  )
+  const { error: successUpsertError } = await supabase
+    .from("distribution_jobs")
+    .upsert(
+      {
+        post_id:       id,
+        channel:       "linkedin",
+        status:        "sent",
+        sent_at:       new Date().toISOString(),
+        error_message: null,
+        metadata,
+      },
+      { onConflict: "post_id,channel" },
+    )
+
+  if (successUpsertError) {
+    // LinkedIn post was created but we failed to record it in the DB.
+    // Log server-side only — no token or sensitive data in the message.
+    console.error("[admin/posts/linkedin/send] sent-status upsert error:", successUpsertError.message)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "LinkedIn post was created, but the app failed to record the sent status. " +
+                 "Check server logs for details.",
+      },
+      { status: 500 },
+    )
+  }
 
   return NextResponse.json({ success: true }, { status: 200 })
 }
