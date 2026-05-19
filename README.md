@@ -44,7 +44,7 @@
 
 ```bash
 git clone <repository-url>
-cd <bachelor-Zastavnyi>
+cd bachelor-Zastavnyi
 ```
 
 ### 2. Встановити залежності
