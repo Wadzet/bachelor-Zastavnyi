@@ -374,18 +374,31 @@ function EditPanel({
 
 // ─── Post preview panel ───────────────────────────────────────────────────────
 
+const IMAGE_PROVIDERS: { value: "auto" | "replicate" | "gemini" | "svg"; label: string }[] = [
+  { value: "auto",      label: "Auto"      },
+  { value: "replicate", label: "Replicate" },
+  { value: "gemini",    label: "Gemini"    },
+  { value: "svg",       label: "SVG"       },
+]
+
 function PostPreviewPanel({
   post,
   onClose,
   onGenerateImage,
   isGenerating,
   generateError,
+  imageProvider,
+  onProviderChange,
+  lastImageProvider,
 }: {
-  post:            Post
-  onClose:         () => void
-  onGenerateImage: () => void
-  isGenerating:    boolean
-  generateError:   string | null
+  post:             Post
+  onClose:          () => void
+  onGenerateImage:  () => void
+  isGenerating:     boolean
+  generateError:    string | null
+  imageProvider:    "auto" | "replicate" | "gemini" | "svg"
+  onProviderChange: (p: "auto" | "replicate" | "gemini" | "svg") => void
+  lastImageProvider: string | null
 }) {
   const path = publicUrlPath(post)
 
@@ -470,11 +483,36 @@ function PostPreviewPanel({
 
       {/* Generate cover image */}
       <div className="mt-4 border-t border-zinc-800/60 pt-4">
+        {/* Provider selector */}
+        <div className="mb-3 flex items-center gap-2">
+          <label htmlFor="img-provider" className="text-[10px] font-medium uppercase tracking-wider text-zinc-600">
+            Provider
+          </label>
+          <select
+            id="img-provider"
+            value={imageProvider}
+            onChange={(e) => onProviderChange(e.target.value as "auto" | "replicate" | "gemini" | "svg")}
+            disabled={isGenerating}
+            className="rounded border border-zinc-700 bg-zinc-800/60 px-2 py-0.5 text-xs text-zinc-300 focus:border-amber-400/50 focus:outline-none disabled:opacity-50"
+          >
+            {IMAGE_PROVIDERS.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+
         {generateError && (
           <p role="alert" className="mb-3 text-xs text-red-400">
             {generateError}
           </p>
         )}
+
+        {lastImageProvider && !generateError && (
+          <p className="mb-3 text-[10px] text-emerald-500">
+            ✓ Generated with {lastImageProvider}
+          </p>
+        )}
+
         <button
           type="button"
           onClick={onGenerateImage}
@@ -499,8 +537,8 @@ function PostPreviewPanel({
           )}
         </button>
         <p className="mt-2 text-[10px] leading-relaxed text-zinc-700">
-          AI-generated cover image using Gemini. Image is saved to Supabase Storage
-          and the post record is updated automatically.
+          Cover image saved to Supabase Storage and post record updated automatically.
+          Auto mode uses Replicate (FLUX.1 Schnell) with SVG fallback.
         </p>
       </div>
     </div>
@@ -931,6 +969,8 @@ export default function PostsClient({ posts }: Props) {
   const [editingPost, setEditingPost]       = useState<Post | null>(null)
   const [actionLoading, setActionLoading]   = useState<ActionLoading>(null)
   const [actionError, setActionError]       = useState<ActionError>(null)
+  const [imageProvider, setImageProvider]   = useState<"auto" | "replicate" | "gemini" | "svg">("auto")
+  const [lastImageProvider, setLastImageProvider] = useState<string | null>(null)
 
   // ── Filtered list ────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -1165,12 +1205,22 @@ export default function PostsClient({ posts }: Props) {
   async function handleGenerateImage(post: Post) {
     setActionLoading({ id: post.id, action: "img-generate" })
     setActionError(null)
+    setLastImageProvider(null)
     try {
-      const res  = await fetch(`/api/admin/posts/${post.id}/image/generate`, { method: "POST" })
+      const res  = await fetch(`/api/admin/posts/${post.id}/image/generate`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ provider: imageProvider }),
+      })
       const json = await res.json()
       if (!json.success) {
         setActionError({ id: post.id, message: json.message ?? "Failed to generate image." })
       } else {
+        // Track which provider actually ran (may differ from imageProvider in auto mode)
+        const usedProvider = json.fallback
+          ? `${String(json.provider)} (fallback)`
+          : String(json.provider)
+        setLastImageProvider(usedProvider)
         // Optimistically update coverImage in selectedPost so the preview shows
         // immediately — before router.refresh() completes.
         setSelectedPost((prev) =>
@@ -1669,6 +1719,9 @@ export default function PostsClient({ posts }: Props) {
                     generateError={
                       actionError?.id === activePost.id ? actionError.message : null
                     }
+                    imageProvider={imageProvider}
+                    onProviderChange={setImageProvider}
+                    lastImageProvider={lastImageProvider}
                   />
                 )
               })()

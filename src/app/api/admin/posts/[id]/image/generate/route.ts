@@ -1,25 +1,30 @@
 import { NextResponse }        from "next/server"
 import { requireAdminApiAuth } from "@/lib/auth/admin"
 import { getServerClient }     from "@/lib/supabase/server"
-import { generateCoverImage }  from "@/lib/gemini/image"
+import { generateImage }       from "@/lib/image"
+import type { ImageProvider }  from "@/lib/image"
 
 // POST /api/admin/posts/[id]/image/generate
 //
-// Generates an AI cover image for a post using Gemini, uploads it to
-// Supabase Storage (post-images bucket), and updates posts.cover_image_url.
+// Generates an AI cover image for a post, uploads it to Supabase Storage
+// (post-images bucket), and updates posts.cover_image_url.
+//
+// Request body (all optional):
+//   { provider?: "auto" | "replicate" | "gemini" | "svg" }
 //
 // Constraints:
 //   • Requires admin auth.
 //   • One image per request — no batch generation.
-//   • Post must exist. Any status is accepted (draft, review, published).
-//   • Gemini API key and service role key stay server-side.
-//   • Generated image prompt is never returned to the browser.
+//   • Post must exist. Any status accepted (draft, review, published).
+//   • All API tokens stay server-side; raw provider errors never reach browser.
 //
-// Success response: { success: true, imageUrl, visualType }
+// Success response: { success: true, imageUrl, visualType, provider, fallback? }
 // Error response:   { success: false, message }   (safe — no secrets)
 
+const VALID_PROVIDERS: ImageProvider[] = ["auto", "replicate", "gemini", "svg"]
+
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const authError = await requireAdminApiAuth()
@@ -27,6 +32,17 @@ export async function POST(
 
   const { id } = await params
   const supabase = getServerClient()
+
+  // ── Parse optional provider from body ─────────────────────────────────────
+  let provider: ImageProvider = "auto"
+  try {
+    const body = await request.json() as { provider?: unknown }
+    if (body.provider && VALID_PROVIDERS.includes(body.provider as ImageProvider)) {
+      provider = body.provider as ImageProvider
+    }
+  } catch {
+    // No body or invalid JSON — use default provider
+  }
 
   // ── Fetch post ────────────────────────────────────────────────────────────
   const { data: post, error: fetchError } = await supabase
@@ -51,40 +67,46 @@ export async function POST(
   }
 
   const { title, excerpt, body_markdown, content_type, topic } = post as {
-    id:           string
-    title:        string
-    excerpt:      string
+    id:            string
+    title:         string
+    excerpt:       string
     body_markdown: string | null
-    content_type: string
-    topic:        string
-    status:       string
+    content_type:  string
+    topic:         string
+    status:        string
   }
 
-  // ── Check env vars early (fail fast) ─────────────────────────────────────
-  if (!process.env.GEMINI_API_KEY) {
-    console.error("[posts/image/generate] GEMINI_API_KEY is not set")
+  // ── Validate provider-specific requirements ───────────────────────────────
+  if (provider === "replicate" && !process.env.REPLICATE_API_TOKEN) {
     return NextResponse.json(
-      { success: false, message: "Image generation is not configured (missing GEMINI_API_KEY)." },
+      { success: false, message: "Replicate provider not configured (missing REPLICATE_API_TOKEN)." },
+      { status: 500 },
+    )
+  }
+  if (provider === "gemini" && !process.env.GEMINI_API_KEY) {
+    return NextResponse.json(
+      { success: false, message: "Gemini provider not configured (missing GEMINI_API_KEY)." },
       { status: 500 },
     )
   }
 
-  // ── Generate image via Gemini ─────────────────────────────────────────────
-  let imageResult: Awaited<ReturnType<typeof generateCoverImage>>
+  // ── Generate image via provider router ────────────────────────────────────
+  console.log(`[posts/image/generate] starting — post=${id} provider=${provider}`)
+
+  let imageResult: Awaited<ReturnType<typeof generateImage>>
 
   try {
-    imageResult = await generateCoverImage({
+    imageResult = await generateImage({
       title,
       excerpt,
       body:        body_markdown ?? "",
       topic,
       contentType: content_type,
+      provider,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    // Log full error server-side; return a safe message to the browser.
-    // Never log or return the raw prompt, API key, or model response.
-    console.error("[posts/image/generate] Gemini image generation failed:", msg)
+    console.error("[posts/image/generate] generation failed:", msg)
     return NextResponse.json(
       {
         success: false,
@@ -94,27 +116,33 @@ export async function POST(
     )
   }
 
-  // ── Convert base64 to Buffer for Supabase Storage upload ─────────────────
-  const imageBuffer = Buffer.from(imageResult.base64, "base64")
-  const extension   = imageResult.mimeType.includes("jpeg") ? "jpg" : "png"
+  // ── Determine file extension from mime type ───────────────────────────────
+  function mimeToExtension(mimeType: string): string {
+    if (mimeType.includes("jpeg") || mimeType.includes("jpg")) return "jpg"
+    if (mimeType.includes("webp"))                              return "webp"
+    if (mimeType.includes("svg"))                               return "svg"
+    return "png"
+  }
+
+  const extension   = mimeToExtension(imageResult.mimeType)
   const storagePath = `posts/${id}/cover-${Date.now()}.${extension}`
 
   // ── Upload to Supabase Storage (post-images bucket) ───────────────────────
-  // Service role bypasses storage RLS — no anon upload policy is needed.
   const { error: uploadError } = await supabase.storage
     .from("post-images")
-    .upload(storagePath, imageBuffer, {
+    .upload(storagePath, imageResult.buffer, {
       contentType: imageResult.mimeType,
-      upsert:      false,   // prevent accidental overwrites — use a fresh timestamp path
+      upsert:      false,
     })
 
   if (uploadError) {
-    console.error("[posts/image/generate] Storage upload error:", uploadError.message)
+    console.error("[posts/image/generate] storage upload error:", uploadError.message)
     return NextResponse.json(
       {
         success: false,
-        message: "Image was generated but could not be saved. " +
-                 "Check that the 'post-images' Supabase Storage bucket exists and is public.",
+        message:
+          "Image was generated but could not be saved. " +
+          "Check that the 'post-images' Supabase Storage bucket exists and is public.",
       },
       { status: 500 },
     )
@@ -135,13 +163,12 @@ export async function POST(
 
   if (updateError) {
     console.error("[posts/image/generate] posts update error:", updateError.message)
-    // Image was uploaded but DB update failed. The image is orphaned in Storage
-    // but that is recoverable. Return the URL so the admin can at least see it.
     return NextResponse.json(
       {
         success: false,
-        message: "Image was saved but the post record could not be updated. " +
-                 "Refresh the page and set the cover image URL manually if needed.",
+        message:
+          "Image was saved but the post record could not be updated. " +
+          "Refresh the page and set the cover image URL manually if needed.",
         imageUrl,
       },
       { status: 500 },
@@ -149,8 +176,9 @@ export async function POST(
   }
 
   console.log(
-    `[posts/image/generate] cover generated — post=${id} ` +
-    `visualType=${imageResult.visualType} path=${storagePath}`,
+    `[posts/image/generate] complete — post=${id} ` +
+    `provider=${imageResult.provider} visualType=${imageResult.visualType} ` +
+    `fallback=${imageResult.fallback} path=${storagePath}`,
   )
 
   return NextResponse.json(
@@ -158,6 +186,8 @@ export async function POST(
       success:    true,
       imageUrl,
       visualType: imageResult.visualType,
+      provider:   imageResult.provider,
+      ...(imageResult.fallback ? { fallback: true } : {}),
     },
     { status: 200 },
   )
