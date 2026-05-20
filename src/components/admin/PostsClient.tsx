@@ -601,6 +601,11 @@ function TelegramPreviewPanel({
         </p>
       </div>
 
+      {/* Cover image note */}
+      <p className={`mt-2 text-[10px] ${post.coverImage ? "text-emerald-600" : "text-zinc-600"}`}>
+        {post.coverImage ? "📷 Cover image will be included" : "Text-only post (no cover image)"}
+      </p>
+
       {/* Note for unpublished posts */}
       {post.status !== "published" && (
         <p className="mt-3 text-xs text-amber-500/70">
@@ -815,6 +820,11 @@ function LinkedInPreviewPanel({
           {text}
         </p>
       </div>
+
+      {/* Cover image note */}
+      <p className={`mt-2 text-[10px] ${post.coverImage ? "text-emerald-600" : "text-zinc-600"}`}>
+        {post.coverImage ? "🖼 Cover image will be included" : "Text-only post (no cover image)"}
+      </p>
 
       {/* Inline error */}
       {error && (

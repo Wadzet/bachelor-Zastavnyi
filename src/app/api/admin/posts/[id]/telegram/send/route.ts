@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server"
 import { getServerClient } from "@/lib/supabase/server"
-import { sendTelegramMessage } from "@/lib/telegram/client"
+import { sendTelegramMessage, sendTelegramPhoto, TELEGRAM_CAPTION_LIMIT } from "@/lib/telegram/client"
 import { BRAND } from "@/config/brand"
 import { requireAdminApiAuth } from "@/lib/auth/admin"
 
-// Temporary MVP admin route. Must be protected by auth before production.
+// POST /api/admin/posts/[id]/telegram/send
+//
+// Sends a published post to Telegram.
+// If posts.cover_image_url is set, sends via sendPhoto (photo + caption).
+// If no cover image, sends via sendMessage (plain text).
+// If sendPhoto fails, falls back to sendMessage automatically.
+//
+// metadata stored in distribution_jobs:
+//   { telegram_message_id, delivery_type: "photo" | "message" }
 
-// ─── Message builder (server-side, not trusted from client) ──────────────────
+// ─── Message builder ──────────────────────────────────────────────────────────
 
 function publicUrlPath(contentType: string, slug: string): string {
   return contentType === "interview"
@@ -25,7 +33,6 @@ function buildMessage(
   const shortExcerpt =
     excerpt.length > 140 ? excerpt.slice(0, 137) + "…" : excerpt
 
-  // Plain text — safe for any post content regardless of special characters
   return (
     `New ${label} from ${BRAND.name}:\n\n` +
     `${title}\n\n` +
@@ -34,7 +41,44 @@ function buildMessage(
   )
 }
 
-// ─── POST /api/admin/posts/[id]/telegram/send ─────────────────────────────────
+/** Build a caption for sendPhoto — respects Telegram's 1024-char limit. */
+function buildCaption(
+  title:       string,
+  excerpt:     string,
+  contentType: string,
+  slug:        string,
+): string {
+  const url   = `${BRAND.siteUrl}${publicUrlPath(contentType, slug)}`
+  // Reserve ~60 chars for URL + label line at end
+  const reserveChars = url.length + 60
+  const excerptLimit = Math.max(60, TELEGRAM_CAPTION_LIMIT - title.length - reserveChars - 10)
+  const shortExcerpt = excerpt.length > excerptLimit
+    ? excerpt.slice(0, excerptLimit - 1) + "…"
+    : excerpt
+
+  const label = contentType === "article" ? "article" : "insight"
+  return (
+    `New ${label} from ${BRAND.name}:\n\n` +
+    `${title}\n\n` +
+    `${shortExcerpt}\n\n` +
+    `Read the full article:\n${url}`
+  )
+}
+
+// ─── Helper: upsert a failed distribution job ─────────────────────────────────
+
+async function recordFailed(
+  supabase: ReturnType<typeof getServerClient>,
+  postId:   string,
+  message:  string,
+) {
+  await supabase.from("distribution_jobs").upsert(
+    { post_id: postId, channel: "telegram", status: "failed", error_message: message },
+    { onConflict: "post_id,channel" },
+  )
+}
+
+// ─── POST handler ─────────────────────────────────────────────────────────────
 
 export async function POST(
   _request: Request,
@@ -46,10 +90,10 @@ export async function POST(
   const { id } = await params
   const supabase = getServerClient()
 
-  // ── Fetch post ────────────────────────────────────────────────────────────────
+  // ── Fetch post (include cover_image_url) ──────────────────────────────────
   const { data: post, error: fetchError } = await supabase
     .from("posts")
-    .select("id, title, excerpt, content_type, slug, status")
+    .select("id, title, excerpt, content_type, slug, status, cover_image_url")
     .eq("id", id)
     .maybeSingle()
 
@@ -68,16 +112,16 @@ export async function POST(
     )
   }
 
-  const { title, excerpt, content_type, slug, status } = post as {
-    id:           string
-    title:        string
-    excerpt:      string
-    content_type: string
-    slug:         string
-    status:       string
+  const { title, excerpt, content_type, slug, status, cover_image_url } = post as {
+    id:              string
+    title:           string
+    excerpt:         string
+    content_type:    string
+    slug:            string
+    status:          string
+    cover_image_url: string | null
   }
 
-  // ── Require published status ──────────────────────────────────────────────────
   if (status !== "published") {
     return NextResponse.json(
       { success: false, message: "Only published posts can be sent to Telegram." },
@@ -85,7 +129,6 @@ export async function POST(
     )
   }
 
-  // ── Require TELEGRAM_CHAT_ID env var ──────────────────────────────────────────
   const chatId = process.env.TELEGRAM_CHAT_ID
   if (!chatId) {
     console.error("[admin/posts/telegram/send] TELEGRAM_CHAT_ID is not set.")
@@ -95,62 +138,81 @@ export async function POST(
     )
   }
 
-  // ── Build message server-side ─────────────────────────────────────────────────
-  const text = buildMessage(title, excerpt, content_type, slug)
-
-  // ── Send to Telegram ──────────────────────────────────────────────────────────
+  // ── Send: photo + caption if cover image exists, plain text otherwise ─────
   let telegramResult: Awaited<ReturnType<typeof sendTelegramMessage>>
-  try {
-    telegramResult = await sendTelegramMessage({ chatId, text })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error"
-    console.error("[admin/posts/telegram/send] network error:", msg)
+  let deliveryType: "photo" | "message" = "message"
 
-    // Mark as failed in distribution_jobs
-    await supabase.from("distribution_jobs").upsert(
-      {
-        post_id:       id,
-        channel:       "telegram",
-        status:        "failed",
-        error_message: "Network error sending to Telegram.",
-      },
-      { onConflict: "post_id,channel" },
-    )
+  if (cover_image_url) {
+    // Attempt sendPhoto first
+    console.log(`[admin/posts/telegram/send] sending photo — post=${id}`)
+    try {
+      const caption = buildCaption(title, excerpt, content_type, slug)
+      const photoResult = await sendTelegramPhoto({ chatId, photoUrl: cover_image_url, caption })
 
-    return NextResponse.json(
-      { success: false, message: "Failed to send Telegram message." },
-      { status: 500 },
-    )
+      if (photoResult.ok) {
+        telegramResult = photoResult
+        deliveryType   = "photo"
+      } else {
+        // Photo rejected by Telegram API — fall back to text
+        console.warn(
+          `[admin/posts/telegram/send] sendPhoto failed (${photoResult.description ?? "unknown"}), falling back to text`
+        )
+        const text = buildMessage(title, excerpt, content_type, slug)
+        telegramResult = await sendTelegramMessage({ chatId, text })
+        deliveryType   = "message"
+      }
+    } catch (err) {
+      // Network error during photo send — fall back to text
+      const msg = err instanceof Error ? err.message : "Unknown error"
+      console.warn(`[admin/posts/telegram/send] sendPhoto network error (${msg}), falling back to text`)
+      try {
+        const text = buildMessage(title, excerpt, content_type, slug)
+        telegramResult = await sendTelegramMessage({ chatId, text })
+        deliveryType   = "message"
+      } catch (fallbackErr) {
+        const fbMsg = fallbackErr instanceof Error ? fallbackErr.message : "Unknown error"
+        console.error("[admin/posts/telegram/send] text fallback also failed:", fbMsg)
+        await recordFailed(supabase, id, "Network error sending to Telegram.")
+        return NextResponse.json(
+          { success: false, message: "Failed to send Telegram message." },
+          { status: 500 },
+        )
+      }
+    }
+  } else {
+    // No cover image — plain text only
+    console.log(`[admin/posts/telegram/send] sending text message — post=${id}`)
+    const text = buildMessage(title, excerpt, content_type, slug)
+    try {
+      telegramResult = await sendTelegramMessage({ chatId, text })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error"
+      console.error("[admin/posts/telegram/send] network error:", msg)
+      await recordFailed(supabase, id, "Network error sending to Telegram.")
+      return NextResponse.json(
+        { success: false, message: "Failed to send Telegram message." },
+        { status: 500 },
+      )
+    }
   }
 
   if (!telegramResult.ok) {
-    // Safe error — never returns the bot token or chat ID
     const safeError = telegramResult.description
       ? `Telegram API error: ${telegramResult.description.slice(0, 200)}`
       : "Telegram API returned an error."
-
     console.error("[admin/posts/telegram/send] Telegram API error:", telegramResult.description)
-
-    await supabase.from("distribution_jobs").upsert(
-      {
-        post_id:       id,
-        channel:       "telegram",
-        status:        "failed",
-        error_message: safeError,
-      },
-      { onConflict: "post_id,channel" },
-    )
-
+    await recordFailed(supabase, id, safeError)
     return NextResponse.json(
       { success: false, message: "Failed to send Telegram message." },
       { status: 500 },
     )
   }
 
-  // ── Success — record sent status ──────────────────────────────────────────────
-  const metadata = telegramResult.messageId
-    ? JSON.stringify({ telegram_message_id: telegramResult.messageId })
-    : null
+  // ── Success — record sent status ──────────────────────────────────────────
+  const metadata = JSON.stringify({
+    telegram_message_id: telegramResult.messageId ?? null,
+    delivery_type:       deliveryType,
+  })
 
   await supabase.from("distribution_jobs").upsert(
     {
@@ -164,5 +226,6 @@ export async function POST(
     { onConflict: "post_id,channel" },
   )
 
+  console.log(`[admin/posts/telegram/send] sent — post=${id} delivery=${deliveryType}`)
   return NextResponse.json({ success: true }, { status: 200 })
 }
