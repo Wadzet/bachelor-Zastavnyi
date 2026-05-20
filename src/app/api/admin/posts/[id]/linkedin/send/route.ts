@@ -11,15 +11,12 @@ import { requireAdminApiAuth } from "@/lib/auth/admin"
 // POST /api/admin/posts/[id]/linkedin/send
 // Sends a published post to the connected LinkedIn member profile via the API.
 //
-// Image strategy:
-//   If posts.cover_image_url is set:
-//     1. Upload image to LinkedIn Images API (register + PUT bytes)
-//     2. Create post with image media
-//     3. If image upload or image-post fails: fall back to text-only post
-//   If no cover image: text-only post directly
-//
-// On success: upserts distribution_jobs with status=sent
-// On failure: upserts distribution_jobs with status=failed
+// Delivery strategy:
+//   cover_image_url present AND not SVG → try image upload + image post
+//     image upload/post fails           → fall back to text-only post
+//   cover_image_url present AND is SVG  → text-only post (SVG not supported
+//                                         by LinkedIn Images API: JPG/GIF/PNG only)
+//   cover_image_url absent              → text-only post
 //
 // metadata stored: { linkedin_post_id, linkedin_image_urn?, delivery_type: "image"|"text", manual: false }
 
@@ -43,6 +40,18 @@ function buildLinkedInText(
     `Read more: ${url}\n\n` +
     `#AI #BusinessStrategy #Operations #DigitalTransformation`
   )
+}
+
+/**
+ * Returns true if the URL points to an SVG file.
+ * LinkedIn Images API supports JPG / GIF / PNG only — not SVG.
+ */
+function isSvgUrl(url: string): boolean {
+  try {
+    return new URL(url).pathname.toLowerCase().endsWith(".svg")
+  } catch {
+    return url.toLowerCase().includes(".svg")
+  }
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
@@ -149,52 +158,70 @@ export async function POST(
   const memberUrn = `urn:li:person:${account.provider_account_id}`
   const text      = buildLinkedInText(title, excerpt, content_type, slug)
 
-  // ── Attempt image post if cover image exists ──────────────────────────────
+  // ── Choose delivery method ────────────────────────────────────────────────
   let result: Awaited<ReturnType<typeof createLinkedInPost>>
   let deliveryType: "image" | "text" = "text"
   let linkedinImageUrn: string | undefined
 
   if (cover_image_url) {
-    console.log(`[admin/posts/linkedin/send] uploading cover image — post=${id}`)
-    const uploadResult = await uploadLinkedInImage({
-      accessToken: account.access_token,
-      memberUrn,
-      imageUrl: cover_image_url,
-    })
+    const isSvg = isSvgUrl(cover_image_url)
+    console.log(
+      `[admin/posts/linkedin/send] cover image detected — post=${id} isSvg=${isSvg}`
+    )
 
-    if (uploadResult.ok && uploadResult.imageUrn) {
-      // Image uploaded — create post with image
-      console.log(`[admin/posts/linkedin/send] creating image post — post=${id}`)
-      result = await createLinkedInPostWithImage({
+    if (isSvg) {
+      // LinkedIn Images API supports JPG/GIF/PNG only — not SVG
+      console.log(
+        "[admin/posts/linkedin/send] cover image is SVG — delivery fallback reason: " +
+        "SVG not supported by LinkedIn Images API (JPG/GIF/PNG only)"
+      )
+      result       = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
+      deliveryType = "text"
+    } else {
+      // PNG / JPEG / WebP — attempt image upload then image post
+      console.log(`[admin/posts/linkedin/send] uploading cover image — post=${id}`)
+      const uploadResult = await uploadLinkedInImage({
         accessToken: account.access_token,
         memberUrn,
-        text,
-        imageUrn: uploadResult.imageUrn,
+        imageUrl:    cover_image_url,
       })
 
-      if (result.ok) {
-        deliveryType     = "image"
-        linkedinImageUrn = uploadResult.imageUrn
+      if (uploadResult.ok && uploadResult.imageUrn) {
+        console.log(`[admin/posts/linkedin/send] creating image post — post=${id}`)
+        const imagePostResult = await createLinkedInPostWithImage({
+          accessToken: account.access_token,
+          memberUrn,
+          text,
+          imageUrn: uploadResult.imageUrn,
+        })
+
+        if (imagePostResult.ok) {
+          result           = imagePostResult
+          deliveryType     = "image"
+          linkedinImageUrn = uploadResult.imageUrn
+        } else {
+          // Image post failed — fall back to text
+          console.warn(
+            `[admin/posts/linkedin/send] image post failed — delivery fallback reason: ` +
+            `${imagePostResult.error ?? "unknown error"}`
+          )
+          result       = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
+          deliveryType = "text"
+        }
       } else {
-        // Image post failed — fall back to text
+        // Image upload failed — fall back to text
         console.warn(
-          `[admin/posts/linkedin/send] image post failed (${result.error ?? "unknown"}), falling back to text`
+          `[admin/posts/linkedin/send] image upload failed — delivery fallback reason: ` +
+          `${uploadResult.error ?? "unknown error"}`
         )
-        result = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
+        result       = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
         deliveryType = "text"
       }
-    } else {
-      // Image upload failed — fall back to text-only post
-      console.warn(
-        `[admin/posts/linkedin/send] image upload failed (${uploadResult.error ?? "unknown"}), falling back to text`
-      )
-      result = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
-      deliveryType = "text"
     }
   } else {
     // No cover image — text-only directly
-    console.log(`[admin/posts/linkedin/send] creating text post — post=${id}`)
-    result = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
+    console.log(`[admin/posts/linkedin/send] no cover image — creating text post — post=${id}`)
+    result       = await createLinkedInPost({ accessToken: account.access_token, memberUrn, text })
     deliveryType = "text"
   }
 
@@ -221,10 +248,10 @@ export async function POST(
 
   // ── Success — record sent status ──────────────────────────────────────────
   const metadata = JSON.stringify({
-    linkedin_post_id:  result.postId ?? null,
+    linkedin_post_id:   result.postId ?? null,
     linkedin_image_urn: linkedinImageUrn ?? null,
-    delivery_type:     deliveryType,
-    manual:            false,
+    delivery_type:      deliveryType,
+    manual:             false,
   })
 
   const { error: successUpsertError } = await supabase

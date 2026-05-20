@@ -7,14 +7,17 @@ import { requireAdminApiAuth } from "@/lib/auth/admin"
 // POST /api/admin/posts/[id]/telegram/send
 //
 // Sends a published post to Telegram.
-// If posts.cover_image_url is set, sends via sendPhoto (photo + caption).
-// If no cover image, sends via sendMessage (plain text).
-// If sendPhoto fails, falls back to sendMessage automatically.
+//
+// Delivery strategy:
+//   cover_image_url present AND not SVG → sendPhoto (photo + caption)
+//   cover_image_url present AND is SVG  → sendMessage (SVG not supported by Telegram)
+//   cover_image_url absent              → sendMessage (plain text)
+//   sendPhoto fails                     → sendMessage fallback
 //
 // metadata stored in distribution_jobs:
 //   { telegram_message_id, delivery_type: "photo" | "message" }
 
-// ─── Message builder ──────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function publicUrlPath(contentType: string, slug: string): string {
   return contentType === "interview"
@@ -28,11 +31,9 @@ function buildMessage(
   contentType: string,
   slug:        string,
 ): string {
-  const label      = contentType === "article" ? "article" : "insight"
-  const url        = `${BRAND.siteUrl}${publicUrlPath(contentType, slug)}`
-  const shortExcerpt =
-    excerpt.length > 140 ? excerpt.slice(0, 137) + "…" : excerpt
-
+  const label        = contentType === "article" ? "article" : "insight"
+  const url          = `${BRAND.siteUrl}${publicUrlPath(contentType, slug)}`
+  const shortExcerpt = excerpt.length > 140 ? excerpt.slice(0, 137) + "…" : excerpt
   return (
     `New ${label} from ${BRAND.name}:\n\n` +
     `${title}\n\n` +
@@ -48,14 +49,12 @@ function buildCaption(
   contentType: string,
   slug:        string,
 ): string {
-  const url   = `${BRAND.siteUrl}${publicUrlPath(contentType, slug)}`
-  // Reserve ~60 chars for URL + label line at end
+  const url          = `${BRAND.siteUrl}${publicUrlPath(contentType, slug)}`
   const reserveChars = url.length + 60
   const excerptLimit = Math.max(60, TELEGRAM_CAPTION_LIMIT - title.length - reserveChars - 10)
   const shortExcerpt = excerpt.length > excerptLimit
     ? excerpt.slice(0, excerptLimit - 1) + "…"
     : excerpt
-
   const label = contentType === "article" ? "article" : "insight"
   return (
     `New ${label} from ${BRAND.name}:\n\n` +
@@ -65,7 +64,18 @@ function buildCaption(
   )
 }
 
-// ─── Helper: upsert a failed distribution job ─────────────────────────────────
+/**
+ * Returns true if the URL points to an SVG file.
+ * Checks the URL pathname to avoid false positives from query strings.
+ * SVG is not supported by Telegram sendPhoto.
+ */
+function isSvgUrl(url: string): boolean {
+  try {
+    return new URL(url).pathname.toLowerCase().endsWith(".svg")
+  } catch {
+    return url.toLowerCase().includes(".svg")
+  }
+}
 
 async function recordFailed(
   supabase: ReturnType<typeof getServerClient>,
@@ -138,50 +148,76 @@ export async function POST(
     )
   }
 
-  // ── Send: photo + caption if cover image exists, plain text otherwise ─────
+  // ── Choose delivery method ────────────────────────────────────────────────
   let telegramResult: Awaited<ReturnType<typeof sendTelegramMessage>>
   let deliveryType: "photo" | "message" = "message"
 
   if (cover_image_url) {
-    // Attempt sendPhoto first
-    console.log(`[admin/posts/telegram/send] sending photo — post=${id}`)
-    try {
-      const caption = buildCaption(title, excerpt, content_type, slug)
-      const photoResult = await sendTelegramPhoto({ chatId, photoUrl: cover_image_url, caption })
+    const isSvg = isSvgUrl(cover_image_url)
+    console.log(
+      `[admin/posts/telegram/send] cover image detected — post=${id} isSvg=${isSvg}`
+    )
 
-      if (photoResult.ok) {
-        telegramResult = photoResult
-        deliveryType   = "photo"
-      } else {
-        // Photo rejected by Telegram API — fall back to text
-        console.warn(
-          `[admin/posts/telegram/send] sendPhoto failed (${photoResult.description ?? "unknown"}), falling back to text`
-        )
-        const text = buildMessage(title, excerpt, content_type, slug)
-        telegramResult = await sendTelegramMessage({ chatId, text })
-        deliveryType   = "message"
-      }
-    } catch (err) {
-      // Network error during photo send — fall back to text
-      const msg = err instanceof Error ? err.message : "Unknown error"
-      console.warn(`[admin/posts/telegram/send] sendPhoto network error (${msg}), falling back to text`)
+    if (isSvg) {
+      // SVG is not supported by Telegram sendPhoto — use plain text directly
+      console.log(
+        `[admin/posts/telegram/send] cover image is SVG — delivery fallback reason: SVG not supported by Telegram sendPhoto`
+      )
+      const text = buildMessage(title, excerpt, content_type, slug)
       try {
-        const text = buildMessage(title, excerpt, content_type, slug)
         telegramResult = await sendTelegramMessage({ chatId, text })
         deliveryType   = "message"
-      } catch (fallbackErr) {
-        const fbMsg = fallbackErr instanceof Error ? fallbackErr.message : "Unknown error"
-        console.error("[admin/posts/telegram/send] text fallback also failed:", fbMsg)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error"
+        console.error("[admin/posts/telegram/send] sendMessage (SVG fallback) error:", msg)
         await recordFailed(supabase, id, "Network error sending to Telegram.")
         return NextResponse.json(
           { success: false, message: "Failed to send Telegram message." },
           { status: 500 },
         )
       }
+    } else {
+      // PNG / JPEG / WebP — attempt sendPhoto with text fallback
+      try {
+        const caption     = buildCaption(title, excerpt, content_type, slug)
+        const photoResult = await sendTelegramPhoto({ chatId, photoUrl: cover_image_url, caption })
+
+        if (photoResult.ok) {
+          telegramResult = photoResult
+          deliveryType   = "photo"
+        } else {
+          // Telegram API rejected the photo — fall back to text
+          console.warn(
+            `[admin/posts/telegram/send] sendPhoto failed — delivery fallback reason: ${photoResult.description ?? "Telegram API error"}`
+          )
+          const text = buildMessage(title, excerpt, content_type, slug)
+          telegramResult = await sendTelegramMessage({ chatId, text })
+          deliveryType   = "message"
+        }
+      } catch (err) {
+        // Network error during photo send — fall back to text
+        const msg = err instanceof Error ? err.message : "Unknown error"
+        console.warn(
+          `[admin/posts/telegram/send] sendPhoto network error — delivery fallback reason: ${msg}`
+        )
+        try {
+          const text = buildMessage(title, excerpt, content_type, slug)
+          telegramResult = await sendTelegramMessage({ chatId, text })
+          deliveryType   = "message"
+        } catch (fallbackErr) {
+          const fbMsg = fallbackErr instanceof Error ? fallbackErr.message : "Unknown error"
+          console.error("[admin/posts/telegram/send] text fallback also failed:", fbMsg)
+          await recordFailed(supabase, id, "Network error sending to Telegram.")
+          return NextResponse.json(
+            { success: false, message: "Failed to send Telegram message." },
+            { status: 500 },
+          )
+        }
+      }
     }
   } else {
     // No cover image — plain text only
-    console.log(`[admin/posts/telegram/send] sending text message — post=${id}`)
+    console.log(`[admin/posts/telegram/send] no cover image — sending text message — post=${id}`)
     const text = buildMessage(title, excerpt, content_type, slug)
     try {
       telegramResult = await sendTelegramMessage({ chatId, text })
