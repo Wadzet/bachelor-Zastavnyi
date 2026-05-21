@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { BRAND } from "@/config/brand"
+import Logo from "@/components/brand/Logo"
 import LogoutButton from "@/components/admin/LogoutButton"
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -80,9 +80,7 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps) {
     <aside className="flex h-full w-64 flex-col border-r border-zinc-800 bg-zinc-900">
       {/* Brand */}
       <div className="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-800 px-5">
-        <span className="text-sm font-bold tracking-tight text-white">
-          {BRAND.name}
-        </span>
+        <Logo className="h-5" />
         <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-amber-400">
           Admin
         </span>
