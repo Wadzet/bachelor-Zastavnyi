@@ -39,6 +39,14 @@ function IconPosts() {
   )
 }
 
+function IconAutomation() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+  )
+}
+
 function IconExternal() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden="true">
@@ -60,6 +68,7 @@ const navItems: NavItem[] = [
   { href: "/admin/sources", label: "Sources",   icon: <IconSources /> },
   { href: "/admin/drafts",  label: "Drafts",    icon: <IconDrafts /> },
   { href: "/admin/posts",   label: "Posts",     icon: <IconPosts /> },
+  { href: "/admin/automation", label: "Automation", icon: <IconAutomation /> },
 ]
 
 // ─── Component ────────────────────────────────────────────────────────────────

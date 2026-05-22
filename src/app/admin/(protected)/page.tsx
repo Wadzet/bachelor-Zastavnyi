@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 import { BRAND } from "@/config/brand"
 import StatCard from "@/components/admin/StatCard"
 import StatusBadge from "@/components/admin/StatusBadge"
@@ -143,6 +144,28 @@ export default async function AdminDashboardPage() {
           ))}
         </div>
       </div>
+
+      {/* ── Automated Mode card ──────────────────────────── */}
+      <Link
+        href="/admin/automation"
+        className="group flex items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 transition-colors hover:border-amber-400/40"
+      >
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 text-amber-400">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-white">Automated Mode</p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+              Generate AI drafts from your active sources in one click. Safe by default — drafts only, no
+              auto-publishing or distribution unless you enable it.
+            </p>
+          </div>
+        </div>
+        <span className="shrink-0 text-zinc-600 transition-colors group-hover:text-amber-400" aria-hidden="true">→</span>
+      </Link>
 
       {/* ── Recent content ───────────────────────────────── */}
       <div className="grid min-w-0 w-full max-w-full gap-6 lg:grid-cols-2">
