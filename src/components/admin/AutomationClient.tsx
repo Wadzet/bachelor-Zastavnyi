@@ -52,6 +52,16 @@ const IMAGE_PROVIDERS: { value: AutomationImageProvider; label: string }[] = [
   { value: "svg",       label: "SVG placeholder"     },
 ]
 
+const INTERVAL_OPTIONS: { value: number; label: string }[] = [
+  { value: 15,   label: "Every 15 minutes" },
+  { value: 30,   label: "Every 30 minutes" },
+  { value: 60,   label: "Every hour"       },
+  { value: 180,  label: "Every 3 hours"    },
+  { value: 360,  label: "Every 6 hours"    },
+  { value: 720,  label: "Every 12 hours"   },
+  { value: 1440, label: "Every 24 hours"   },
+]
+
 const inputCls =
   "w-full rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm text-white " +
   "placeholder-zinc-600 focus:border-amber-400/50 focus:outline-none focus:ring-1 " +
@@ -74,16 +84,36 @@ function runStatusClasses(status: AutomationRun["status"]): string {
   }
 }
 
-function extractNotes(metadata: unknown): string[] {
+type RunMeta = {
+  publishedPosts?:          number
+  skippedSources?:          number
+  imageGenerationFailures?: number
+  notes:                    string[]
+}
+
+function parseRunMeta(metadata: unknown): RunMeta {
   try {
     const parsed = typeof metadata === "string" ? JSON.parse(metadata) : metadata
-    if (parsed && typeof parsed === "object" && Array.isArray((parsed as { notes?: unknown }).notes)) {
-      return (parsed as { notes: unknown[] }).notes.map(String)
+    if (parsed && typeof parsed === "object") {
+      const obj   = parsed as Record<string, unknown>
+      const notes = Array.isArray(obj.notes) ? obj.notes.map(String) : []
+      return {
+        publishedPosts:          typeof obj.publishedPosts === "number" ? obj.publishedPosts : undefined,
+        skippedSources:          typeof obj.skippedSources === "number" ? obj.skippedSources : undefined,
+        imageGenerationFailures: typeof obj.imageGenerationFailures === "number" ? obj.imageGenerationFailures : undefined,
+        notes,
+      }
     }
   } catch {
     // ignore malformed metadata
   }
-  return []
+  return { notes: [] }
+}
+
+function triggerClasses(trigger: string): string {
+  return trigger === "scheduled"
+    ? "bg-sky-400/10 text-sky-400"
+    : "bg-zinc-400/10 text-zinc-400"
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -139,6 +169,17 @@ export default function AutomationClient({
   async function toggleEnabled(next: boolean) {
     set("enabled", next)
     await saveSettings({ enabled: next })
+  }
+
+  // ── Scheduling controls (immediate save) ──────────────────────────────────
+  async function toggleScheduledChecks(next: boolean) {
+    set("scheduledChecksEnabled", next)
+    await saveSettings({ scheduledChecksEnabled: next })
+  }
+
+  async function changeInterval(next: number) {
+    set("checkIntervalMinutes", next)
+    await saveSettings({ checkIntervalMinutes: next })
   }
 
   // ── Save the full settings form ───────────────────────────────────────────
@@ -266,10 +307,14 @@ export default function AutomationClient({
               Last run result
             </p>
             <p className="mt-2 text-sm text-zinc-300">
-              Status <span className="font-medium text-white">{lastSummary.status}</span> ·{" "}
-              {lastSummary.processedSources} source(s) processed ·{" "}
-              {lastSummary.createdDrafts} draft(s) ·{" "}
-              {lastSummary.createdPosts} post(s)
+              Status <span className="font-medium text-white">{lastSummary.status}</span>
+              {" · "}trigger <span className="font-medium text-white">{lastSummary.trigger}</span>
+              {" · "}{lastSummary.processedSources} processed
+              {" · "}{lastSummary.createdDrafts} draft(s)
+              {" · "}{lastSummary.createdPosts} post(s)
+              {" · "}{lastSummary.publishedPosts} published
+              {lastSummary.skippedSources > 0 ? ` · ${lastSummary.skippedSources} skipped` : ""}
+              {lastSummary.imageGenerationFailures > 0 ? ` · ${lastSummary.imageGenerationFailures} image warning(s)` : ""}
             </p>
             {lastSummary.notes.length > 0 && (
               <ul className="mt-3 space-y-1">
@@ -280,6 +325,90 @@ export default function AutomationClient({
             )}
           </div>
         )}
+      </div>
+
+      {/* ── Scheduled source checking ───────────────────── */}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white">Scheduled source checking</p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+              When enabled, due sources are checked automatically on the interval below. A periodic
+              cron call decides timing from these settings — <span className="text-zinc-300">“Run automation now”</span>{" "}
+              is a manual run, <span className="text-zinc-300">“Scheduled checks”</span> are automatic.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={settings.scheduledChecksEnabled}
+            aria-label="Enable scheduled checks"
+            disabled={busy || !settings.enabled}
+            onClick={() => toggleScheduledChecks(!settings.scheduledChecksEnabled)}
+            className={[
+              "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-150 disabled:opacity-40",
+              settings.scheduledChecksEnabled ? "bg-emerald-500" : "bg-zinc-700",
+            ].join(" ")}
+          >
+            <span
+              className={[
+                "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-150",
+                settings.scheduledChecksEnabled ? "translate-x-6" : "translate-x-1",
+              ].join(" ")}
+            />
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-zinc-400">Check interval</span>
+            <select
+              className={inputCls}
+              value={settings.checkIntervalMinutes}
+              disabled={busy || !settings.enabled}
+              onChange={(e) => changeInterval(parseInt(e.target.value, 10))}
+            >
+              {INTERVAL_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-zinc-400">Status</span>
+              <span
+                className={[
+                  "inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold",
+                  settings.enabled && settings.scheduledChecksEnabled
+                    ? "bg-emerald-400/10 text-emerald-400"
+                    : "bg-zinc-400/10 text-zinc-400",
+                ].join(" ")}
+              >
+                {settings.enabled && settings.scheduledChecksEnabled ? "Active" : "Inactive"}
+              </span>
+            </div>
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-zinc-400">Last scheduled run</span>
+              <span className="text-xs text-zinc-300">
+                {settings.lastScheduledRunAt ? formatDate(settings.lastScheduledRunAt) : "—"}
+              </span>
+            </div>
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-zinc-400">Next scheduled run</span>
+              <span className="text-xs text-zinc-300">
+                {settings.nextScheduledRunAt ? formatDate(settings.nextScheduledRunAt) : "—"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+          <p className="text-xs leading-relaxed text-amber-200/80">
+            Scheduled checks only create content according to the selected workflow settings below.
+            Telegram and LinkedIn distribution remain disabled unless explicitly enabled.
+          </p>
+        </div>
       </div>
 
       {/* ── Editorial vs Automated ──────────────────────── */}
@@ -453,7 +582,8 @@ export default function AutomationClient({
         ) : (
           <ul role="list" className="space-y-0">
             {runs.map((run) => {
-              const notes = extractNotes(run.metadata)
+              const meta  = parseRunMeta(run.metadata)
+              const notes = meta.notes
               const open  = expandedRun === run.id
               return (
                 <li key={run.id} className="border-b border-zinc-800/60 py-3 last:border-0">
@@ -463,10 +593,16 @@ export default function AutomationClient({
                         <span className={["rounded-full px-2 py-0.5 text-[11px] font-semibold", runStatusClasses(run.status)].join(" ")}>
                           {run.status}
                         </span>
+                        <span className={["rounded-full px-2 py-0.5 text-[11px] font-semibold", triggerClasses(run.trigger)].join(" ")}>
+                          {run.trigger}
+                        </span>
                         <span className="text-xs text-zinc-500">{formatDate(run.startedAt)}</span>
                       </div>
                       <p className="mt-1 text-xs text-zinc-500">
                         {run.processedSources} source(s) · {run.createdDrafts} draft(s) · {run.createdPosts} post(s)
+                        {typeof meta.publishedPosts === "number" ? ` · ${meta.publishedPosts} published` : ""}
+                        {typeof meta.skippedSources === "number" && meta.skippedSources > 0 ? ` · ${meta.skippedSources} skipped` : ""}
+                        {typeof meta.imageGenerationFailures === "number" && meta.imageGenerationFailures > 0 ? ` · ${meta.imageGenerationFailures} image warning(s)` : ""}
                         {run.errorMessage ? ` · ${run.errorMessage}` : ""}
                       </p>
                     </div>

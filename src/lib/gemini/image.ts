@@ -70,6 +70,7 @@ export function selectVisualType(opts: {
 }
 
 // ─── Prompt builder ───────────────────────────────────────────────────────────
+
 //
 // IMPORTANT — text-free rule for AI providers (Replicate + Gemini):
 // AI image models cannot reliably render readable text. Attempting to do so
@@ -95,6 +96,7 @@ const STYLE_GUIDE = [
   "editorial illustration style suitable for a business intelligence publication",
   "16:9 widescreen aspect ratio",
 ].join(", ")
+
 
 // ── Absolute text prohibition — appended to every AI prompt ──────────────────
 // Listed explicitly because AI models need to be told this clearly and repeatedly.
@@ -162,6 +164,7 @@ export function buildImagePrompt(opts: {
   contentType: string
   visualType:  VisualType
 }): string {
+
   const { body, topic, visualType } = opts
 
   // Body snippet is thematic context only — the AI must not render it as text.

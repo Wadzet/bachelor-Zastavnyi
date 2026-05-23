@@ -9,7 +9,7 @@ import type { Source, SourceType, SourceStatus } from "@/types"
 // ─── Types & constants ────────────────────────────────────────────────────────
 
 type StatusFilter  = "All" | SourceStatus
-type ActionLoading = { id: string; action: "pause" | "resume" | "retry" } | null
+type ActionLoading = { id: string; action: "pause" | "resume" | "retry" | "automation" } | null
 type ActionError   = { id: string; message: string } | null
 
 type SourceFields = {
@@ -362,6 +362,29 @@ export default function SourcesClient({ sources }: Props) {
     }
   }
 
+  async function handleToggleAutomation(source: Source) {
+    if (actionLoading) return
+    setActionError(null)
+    setActionLoading({ id: source.id, action: "automation" })
+    try {
+      const res  = await fetch(`/api/admin/sources/${source.id}/automation`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ automationEnabled: !source.automationEnabled }),
+      })
+      const json = (await res.json()) as { success: boolean; message?: string }
+      if (!json.success) {
+        setActionError({ id: source.id, message: json.message ?? "Failed to update automation." })
+      } else {
+        router.refresh()
+      }
+    } catch {
+      setActionError({ id: source.id, message: "Network error. Please try again." })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   async function handleRetry(source: Source) {
     if (actionLoading) return
     setActionError(null)
@@ -510,6 +533,7 @@ export default function SourcesClient({ sources }: Props) {
               const isPausing   = actionLoading?.id === source.id && actionLoading.action === "pause"
               const isResuming  = actionLoading?.id === source.id && actionLoading.action === "resume"
               const isRetrying  = actionLoading?.id === source.id && actionLoading.action === "retry"
+              const isToggling  = actionLoading?.id === source.id && actionLoading.action === "automation"
               const isEditing   = editingSource?.id === source.id
               const thisErr     = actionError?.id === source.id ? actionError.message : null
 
@@ -555,6 +579,17 @@ export default function SourcesClient({ sources }: Props) {
                         <span className="text-zinc-600">
                           Checked {formatChecked(source.lastChecked)}
                         </span>
+                        <span aria-hidden="true" className="text-zinc-700">·</span>
+                        <span
+                          className={[
+                            "rounded-full px-2.5 py-0.5 text-[11px] font-medium",
+                            source.automationEnabled
+                              ? "bg-sky-400/10 text-sky-400"
+                              : "bg-zinc-700/40 text-zinc-500",
+                          ].join(" ")}
+                        >
+                          {source.automationEnabled ? "Automation on" : "Automation off"}
+                        </span>
                       </div>
 
                       {/* Per-source action error */}
@@ -593,6 +628,26 @@ export default function SourcesClient({ sources }: Props) {
                         ].join(" ")}
                       >
                         {isEditing ? "Editing" : "Edit"}
+                      </button>
+
+                      {/* Automation on/off (scheduled checks only) */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAutomation(source)}
+                        disabled={!!actionLoading}
+                        title="Include this source in scheduled automation checks"
+                        className={[
+                          "inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+                          source.automationEnabled
+                            ? "border-sky-700/50 bg-sky-900/20 text-sky-400 hover:bg-sky-900/40"
+                            : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-white",
+                        ].join(" ")}
+                      >
+                        {isToggling
+                          ? "Saving…"
+                          : source.automationEnabled
+                            ? "Disable automation"
+                            : "Enable automation"}
                       </button>
 
                       {/* Pause / Resume / Retry */}
@@ -683,8 +738,9 @@ export default function SourcesClient({ sources }: Props) {
 
       {/* ── Footer note ─────────────────────────────────── */}
       <p className="border-t border-zinc-800/60 pt-4 text-xs text-zinc-700">
-        Source monitoring and automatic draft generation are not yet active.
-        Sources are manually curated in this version.
+        Sources are manually curated. Sources with automation enabled are included
+        in scheduled automation checks; manual &ldquo;Run automation now&rdquo;
+        always processes every active source.
       </p>
 
     </div>

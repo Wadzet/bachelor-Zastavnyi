@@ -64,6 +64,7 @@ export async function PUT(request: Request) {
     "autoPublishWebsite",
     "autoSendTelegram",
     "autoSendLinkedin",
+    "scheduledChecksEnabled",
   ] as const
 
   for (const key of boolKeys) {
@@ -139,6 +140,30 @@ export async function PUT(request: Request) {
       )
     }
     patch.maxSourcesPerRun = value
+  }
+
+  // ── checkIntervalMinutes (15–1440) ────────────────────────────────────────
+  if (body.checkIntervalMinutes !== undefined) {
+    const value = body.checkIntervalMinutes
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 15 || value > 1440) {
+      return NextResponse.json(
+        { success: false, message: "checkIntervalMinutes must be an integer between 15 and 1440." },
+        { status: 400 },
+      )
+    }
+    patch.checkIntervalMinutes = value
+  }
+
+  // ── schedulerTimezone ─────────────────────────────────────────────────────
+  if (body.schedulerTimezone !== undefined) {
+    const value = body.schedulerTimezone
+    if (typeof value !== "string" || value.trim().length === 0 || value.length > 64) {
+      return NextResponse.json(
+        { success: false, message: "schedulerTimezone must be a non-empty string." },
+        { status: 400 },
+      )
+    }
+    patch.schedulerTimezone = value.trim()
   }
 
   if (Object.keys(patch).length === 0) {

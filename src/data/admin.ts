@@ -11,6 +11,7 @@ export const mockSources: Source[] = [
     type: "blog",
     status: "active",
     lastChecked: "2026-05-21T09:00:00Z",
+    automationEnabled: true,
     description: "AI, computing, and technology coverage from MIT.",
   },
   {
@@ -20,6 +21,7 @@ export const mockSources: Source[] = [
     type: "newsletter",
     status: "active",
     lastChecked: "2026-05-21T08:30:00Z",
+    automationEnabled: true,
     description: "Strategy, operations, and management research.",
   },
   {
@@ -29,6 +31,7 @@ export const mockSources: Source[] = [
     type: "blog",
     status: "active",
     lastChecked: "2026-05-21T07:45:00Z",
+    automationEnabled: true,
     description: "Leadership, management, and business strategy.",
   },
   {
@@ -38,6 +41,7 @@ export const mockSources: Source[] = [
     type: "newsletter",
     status: "active",
     lastChecked: "2026-05-21T10:00:00Z",
+    automationEnabled: true,
     description: "Business and technology strategy analysis.",
   },
   {
@@ -47,6 +51,7 @@ export const mockSources: Source[] = [
     type: "newsletter",
     status: "active",
     lastChecked: "2026-05-21T06:00:00Z",
+    automationEnabled: true,
     description: "Curated AI research and applied ML news.",
   },
   {
@@ -56,6 +61,7 @@ export const mockSources: Source[] = [
     type: "research",
     status: "error",
     lastChecked: "2026-05-19T14:00:00Z",
+    automationEnabled: true,
     description: "Market intelligence and business analytics.",
   },
 ]

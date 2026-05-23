@@ -57,6 +57,7 @@ export type Source = {
   type: SourceType
   status: SourceStatus
   lastChecked: string // ISO date
+  automationEnabled: boolean // included in scheduled automation checks
   description?: string
 }
 

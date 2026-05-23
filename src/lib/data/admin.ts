@@ -25,6 +25,7 @@ type SourceRow = {
   status: string
   description: string | null
   last_checked_at: string | null   // NULL = source was never checked
+  automation_enabled: boolean | null
   created_at: string
   updated_at: string
 }
@@ -93,6 +94,8 @@ function mapSourceRow(row: SourceRow): Source {
     // last_checked_at is NULL when the source was just added and never
     // monitored yet. Fall back to created_at so the UI always has a date.
     lastChecked: row.last_checked_at ?? row.created_at,
+    // Defaults to true at the DB level; coerce NULL (pre-migration rows) to true.
+    automationEnabled: row.automation_enabled ?? true,
   }
 }
 

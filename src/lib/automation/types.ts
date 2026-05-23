@@ -8,6 +8,9 @@ export type AutomationImageProvider = "auto" | "replicate" | "gemini" | "svg"
 // guest + Q&A data that the draft pipeline does not capture).
 export type AutomationContentType = "insight" | "article" | "news"
 
+// How an automation run was started.
+export type AutomationTrigger = "manual" | "scheduled"
+
 export type AutomationSettings = {
   id:                    string
   enabled:               boolean
@@ -20,6 +23,12 @@ export type AutomationSettings = {
   autoSendTelegram:      boolean
   autoSendLinkedin:      boolean
   maxSourcesPerRun:      number
+  // ── Scheduling (migration 006) ──
+  scheduledChecksEnabled: boolean
+  checkIntervalMinutes:   number
+  lastScheduledRunAt:     string | null
+  nextScheduledRunAt:     string | null
+  schedulerTimezone:      string
   updatedAt:             string
 }
 
@@ -28,6 +37,7 @@ export type AutomationRunStatus = "running" | "completed" | "failed" | "partial"
 export type AutomationRun = {
   id:               string
   status:           AutomationRunStatus
+  trigger:          AutomationTrigger
   startedAt:        string
   completedAt:      string | null
   processedSources: number
@@ -39,10 +49,15 @@ export type AutomationRun = {
 
 // Summary returned by the run API to the admin UI (safe — no secrets).
 export type AutomationRunSummary = {
-  runId:            string
-  status:           AutomationRunStatus
-  processedSources: number
-  createdDrafts:    number
-  createdPosts:     number
-  notes:            string[]
+  runId:                   string
+  status:                  AutomationRunStatus
+  trigger:                 AutomationTrigger
+  dueSources:              number
+  skippedSources:          number
+  processedSources:        number
+  createdDrafts:           number
+  createdPosts:            number
+  publishedPosts:          number
+  imageGenerationFailures: number
+  notes:                   string[]
 }
