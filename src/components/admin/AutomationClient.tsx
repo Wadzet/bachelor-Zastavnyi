@@ -336,6 +336,8 @@ export default function AutomationClient({
               When enabled, due sources are checked automatically on the interval below. A periodic
               cron call decides timing from these settings — <span className="text-zinc-300">“Run automation now”</span>{" "}
               is a manual run, <span className="text-zinc-300">“Scheduled checks”</span> are automatic.
+              Both only process active, automation-enabled sources; a manual run skips the schedule
+              timing but never skips sources disabled in Sources.
             </p>
           </div>
           <button

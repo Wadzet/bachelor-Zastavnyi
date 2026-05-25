@@ -20,12 +20,12 @@ import type {
 // NO crawling, scheduling, queues, or background workers — sources are used
 // exactly as stored (source.url is fed directly to draft generation).
 //
-// TRIGGER
-//   • "manual"    — fired by an admin via "Run automation now". ALL active
-//                   sources are processed (an explicit override), preserving
-//                   the original behaviour exactly.
-//   • "scheduled" — fired by the cron endpoint. Only sources that are both
-//                   automation-enabled AND due (by interval) are processed.
+// TRIGGER (both only ever touch active + automation-enabled sources)
+//   • "manual"    — fired by an admin via "Run automation now". Processes every
+//                   active, automation-enabled source, ignoring the schedule
+//                   timing only. Disabled sources are NOT bypassed.
+//   • "scheduled" — fired by the cron endpoint. Processes active,
+//                   automation-enabled sources that are also DUE (by interval).
 //
 // Safe-by-default flow per source:
 //   1. Generate a draft from source.url (status 'review').          [always]
@@ -107,18 +107,15 @@ export async function runAutomation(
   const runId = runRow.id as string
 
   // ── 3. Fetch candidate sources (limited) ──────────────────────────────────
-  // Manual runs process every active source (explicit override). Scheduled runs
-  // additionally require automation_enabled = true.
-  let query = supabase
+  // BOTH manual and scheduled runs only ever consider sources that are active
+  // AND automation-enabled. Toggling automation_enabled off in /admin/sources
+  // removes a source from Automated Mode entirely — a manual run does NOT
+  // bypass it (manual only bypasses the schedule/interval timing).
+  const { data: sourceRows, error: sourcesError } = await supabase
     .from("sources")
     .select("id, name, url, automation_enabled, check_interval_minutes, last_checked_at")
     .eq("status", "active")
-
-  if (trigger === "scheduled") {
-    query = query.eq("automation_enabled", true)
-  }
-
-  const { data: sourceRows, error: sourcesError } = await query
+    .eq("automation_enabled", true)
     .order("last_checked_at", { ascending: true, nullsFirst: true })
     .limit(settings.maxSourcesPerRun)
 
@@ -139,7 +136,9 @@ export async function runAutomation(
     sources = candidates.filter((s) => isSourceDue(s, settings.checkIntervalMinutes, nowMs))
     skippedSources = candidates.length - sources.length
   } else {
-    sources = candidates // manual: process all fetched active sources
+    // Manual: process all active + automation-enabled sources, ignoring the
+    // schedule/interval timing only (disabled sources are already filtered out).
+    sources = candidates
     skippedSources = 0
   }
 
@@ -164,7 +163,7 @@ export async function runAutomation(
     notes.push(
       trigger === "scheduled"
         ? "No sources are due for a scheduled check."
-        : "No active sources to process.",
+        : "No active, automation-enabled sources to process.",
     )
   }
 

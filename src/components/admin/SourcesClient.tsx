@@ -738,9 +738,10 @@ export default function SourcesClient({ sources }: Props) {
 
       {/* ── Footer note ─────────────────────────────────── */}
       <p className="border-t border-zinc-800/60 pt-4 text-xs text-zinc-700">
-        Sources are manually curated. Sources with automation enabled are included
-        in scheduled automation checks; manual &ldquo;Run automation now&rdquo;
-        always processes every active source.
+        Sources are manually curated. Disabling automation removes a source from
+        Automated Mode entirely &mdash; both scheduled checks and manual
+        &ldquo;Run automation now&rdquo; skip it. Manual runs only bypass the
+        schedule timing, not disabled sources.
       </p>
 
     </div>
