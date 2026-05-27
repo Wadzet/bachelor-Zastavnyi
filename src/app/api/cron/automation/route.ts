@@ -16,7 +16,8 @@ import { runAutomation } from "@/lib/automation/runAutomation"
 // refuses to run — there is no unauthenticated fallback.
 //
 // Timing is decided HERE, from the database, not from the static cron schedule:
-// Vercel may call this often (e.g. every 30 min); the app runs automation only
+// Vercel may call this on a fixed schedule (daily on Hobby, more often on paid
+// plans); the app runs automation only
 // when scheduled checks are enabled AND the configured interval has elapsed.
 //
 // Security: server-only. CRON_SECRET and all provider tokens stay server-side
